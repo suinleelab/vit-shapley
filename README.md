@@ -1,4 +1,4 @@
-# Shapley value estimation for Vision Transformers
+# ViT-Shapley (Shapley value estimation for Vision Transformers)
 
 ## Installation
 
