@@ -24,20 +24,16 @@ Command lines for training and testing the models are available under `notebooks
 
 ## Datasets
 
-- ImageNette
-- MURA
+- [ImageNette] (https://github.com/fastai/imagenette)
+- [MURA] (https://stanfordmlgroup.github.io/competitions/mura/)
 
 ## Download Pretrained Models
 
-download pretrained models from [here]().
+Download pretrained models from [here]().
 
 ## Citation
 
 If you use any part of this code and pretrained weights for your own purpose, please cite our [paper]().
-
-@InProceedings{xxx,xxx, title = {Learning to Estimate Shapley Values with Vision Transformers}, author = {Covert, Ian
-and Kim, Chanwoo and Lee, Su-In}, booktitle = {Proceedings of the 38th International Conference on Machine Learning},
-year = {2022}, }
 
 ## Contact
 

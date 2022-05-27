@@ -6,17 +6,6 @@
 
 ```bash
 python main.py with 'stage = "surrogate"' \
-'wandb_project_name = "transformer_interpretability_project"' 'exp_name = "ImageNette_classifier_vit_small_patch16_224_lr1e-5_surrogate_lr1e-5_presoftmax"' \
-env_chanwkim 'gpus_classifier=[4]' 'gpus_surrogate=[5]' \
-dataset_ImageNette \
-'classifier_backbone_type = "vit_small_patch16_224"' 'classifier_download_weight = False' 'classifier_load_path = "results/transformer_interpretability_project/2yv2yymu/checkpoints/epoch=14-step=2204.ckpt"' \
-'surrogate_mask_location = "pre-softmax"' \
-'surrogate_backbone_type = "vit_small_patch16_224"' 'surrogate_download_weight = False' 'surrogate_load_path = "results/transformer_interpretability_project/2yv2yymu/checkpoints/epoch=14-step=2204.ckpt"' \
-training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate = 1e-5' 'max_epochs = 50'
-```
-
-```bash
-python main.py with 'stage = "surrogate"' \
 'wandb_project_name = "transformer_interpretability_project"' 'exp_name = "ImageNette_classifier_vit_base_patch16_224_lr1e-5_surrogate_lr1e-5_presoftmax"' \
 env_chanwkim 'gpus_classifier=[3]' 'gpus_surrogate=[1]' \
 dataset_ImageNette \
@@ -27,17 +16,6 @@ training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate
 ```
 
 ### MURA
-
-```bash
-python main.py with 'stage = "surrogate"' \
-'wandb_project_name = "transformer_interpretability_project"' 'exp_name = "MURA_classifier_vit_small_patch16_224_lr1e-5_surrogate_lr1e-5_presoftmax"' \
-env_chanwkim 'gpus_classifier=[5]' 'gpus_surrogate=[4]' \
-dataset_MURA \
-'classifier_backbone_type = "vit_small_patch16_224"' 'classifier_download_weight = False' 'classifier_load_path = "results/transformer_interpretability_project/1bpi84j0/checkpoints/epoch=20-step=10835.ckpt"' \
-'surrogate_mask_location = "pre-softmax"' \
-'surrogate_backbone_type = "vit_small_patch16_224"' 'surrogate_download_weight = False' 'surrogate_load_path = "results/transformer_interpretability_project/1bpi84j0/checkpoints/epoch=20-step=10835.ckpt"' \
-training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate = 1e-5' 'max_epochs = 50'
-```
 
 ```bash
 python main.py with 'stage = "surrogate"' \

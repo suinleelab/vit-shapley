@@ -17,4 +17,3 @@ class MURADataModule(BaseDataModule):
 
 if __name__ == '__main__':
     pass
-    # dataset = APTOS2019(dataset_location="/projects/leelab/chanwkim/APTOS2019", transform_params=transform_params, split='train')

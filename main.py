@@ -1,8 +1,9 @@
 import copy
-import numpy as np
 import os
-import pytorch_lightning as pl
 from datetime import datetime
+
+import numpy as np
+import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 
 from vit_shapley.config import ex
@@ -397,14 +398,6 @@ def main(_config):
 
     else:
         raise NotImplementedError
-
-    # For debug
-    # datamodule.setup_flag=True
-    # datamodule.set_train_dataset()
-    # datamodule.set_val_dataset()
-    # datamodule.set_test_dataset()
-    # datamodule.val_dataset.data = datamodule.val_dataset.data[:64]
-    # datamodule.train_dataset = datamodule.val_dataset
 
     # (5) Initialize `pytorch_lightning` Trainer
     grad_steps = get_grad_steps(gpus=gpus,

@@ -1,4 +1,5 @@
 import platform
+
 from sacred import Experiment
 
 ex = Experiment("ViT_shapley")
@@ -7,7 +8,7 @@ ex = Experiment("ViT_shapley")
 @ex.config
 def config():
     # Stage Setting
-    stage = "classifier"  # (classifier -> surrogate -> explainer)
+    stage = "classifier"  ## (classifier, surrogate, explainer, classifier_masked)
 
     # Wandb setting
     wandb_project_name = "default_wandb_project_name"
@@ -27,7 +28,7 @@ def config():
     seed = 0
 
     # Dataset Setting
-    datasets = "dataset_name"  # APTOS2019
+    datasets = "dataset_name"  # (ImageNette, MURA)
     dataset_location = "path"
     explanation_location_train = None
     explanation_mask_amount_train = None
@@ -40,9 +41,9 @@ def config():
     explanation_mask_ascending_test = None
 
     output_dim = None
-    target_type = None  # should be one of ("binary", "multiclass", "multilabel")
+    target_type = None  # ("binary", "multiclass", "multilabel")
     img_channels = 3
-    test_data_split = "test"
+    test_data_split = "test"  # (test, val, train)
     transforms_train = {
         "Resize": {
             "apply": False,
@@ -117,7 +118,7 @@ def config():
 
     # Classifier Model Setting
     classifier_masked_mask_location = None
-    classifier_backbone_type = None  # "deit_small_patch16_224"
+    classifier_backbone_type = None
     classifier_enable_pos_embed = True
     classifier_download_weight = True
     classifier_load_path = None
@@ -148,7 +149,7 @@ def config():
     explainer_head_include_cls = True
     explainer_norm = True
 
-    explainer_backbone_type = None  # "deit_small_patch16_224"
+    explainer_backbone_type = None
     explainer_download_weight = True
     explainer_load_path = None
 
@@ -178,8 +179,7 @@ def config():
 # Named configs for "environment"
 @ex.named_config
 def env_chanwkim():
-    log_dir = "results"
-    # log_dir=f'/homes/gws/chanwkim/network_drive/{platform.node()}/'
+    log_dir = "results"  # f'/homes/gws/chanwkim/network_drive/{platform.node()}/'
     per_gpu_batch_size = 64  # you should define this manually with per_gpu_batch_size=#
     gpus_classifier = [0]
     gpus_surrogate = [0]
@@ -198,239 +198,6 @@ def training_hyperparameters_transformer():
     grad_clipping = 1.0
     max_epochs = 25
     warmup_steps = 500
-
-
-# Named configs for "dataset"
-@ex.named_config
-def dataset_APTOS2019():
-    datasets = "APTOS2019"
-    dataset_location = "/projects/leelab/chanwkim/APTOS2019"
-    output_dim = 5
-    target_type = "multiclass"
-    checkpoint_metric = "CohenKappa"
-    img_channels = 3
-    transforms_train = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "Normalize": {
-            "apply": True
-        },
-        "VerticalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "HorizontalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "ColorJitter": {
-            "apply": True,
-            "brightness": 0.2,
-            "contrast": 0.2,
-            "saturation": 0.1,
-            "hue": 0.1,
-            "p": 0.8
-        },
-        "RandomResizedCrop": {
-            "apply": True,
-            "size": 224,
-            "scale": [
-                0.8,
-                1.2
-            ]
-        }
-    }
-    transforms_val = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-    transforms_test = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-
-
-# Named configs for "dataset"
-@ex.named_config
-def dataset_MIMIC():
-    datasets = "MIMIC"
-    dataset_location = "/projects/leelab/chanwkim/cxr_data/MIMIC-CXR"
-    output_dim = 13
-    target_type = "multiclass"
-    checkpoint_metric = "AUC"
-    img_channels = 3
-    transforms_train = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "Normalize": {
-            "apply": True
-        },
-        "VerticalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "HorizontalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "ColorJitter": {
-            "apply": True,
-            "brightness": 0.2,
-            "contrast": 0.2,
-            "saturation": 0.1,
-            "hue": 0.1,
-            "p": 0.8
-        },
-        "RandomResizedCrop": {
-            "apply": True,
-            "size": 224,
-            "scale": [
-                0.8,
-                1.2
-            ]
-        }
-    }
-    transforms_val = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-    transforms_test = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-
-
-@ex.named_config
-def dataset_CheXpert():
-    datasets = "CheXpert"
-    dataset_location = {'l0': '/fdata/cxr_datasets/CheXpert',
-                        'l1': '/data2/chanwkim/cxr_data/CheXpert',
-                        'network': '/projects/leelab/chanwkim/cxr_data/CheXpert'}['l0']
-    output_dim = 13
-    target_type = "multiclass"
-    checkpoint_metric = "AUC"
-    img_channels = 3
-    transforms_train = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "Normalize": {
-            "apply": True
-        },
-        "VerticalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "HorizontalFlip": {
-            "apply": True,
-            "p": 0.5
-        },
-        "ColorJitter": {
-            "apply": True,
-            "brightness": 0.2,
-            "contrast": 0.2,
-            "saturation": 0.1,
-            "hue": 0.1,
-            "p": 0.8
-        },
-        "RandomResizedCrop": {
-            "apply": True,
-            "size": 224,
-            "scale": [
-                0.8,
-                1.2
-            ]
-        }
-    }
-    transforms_val = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-    transforms_test = {
-        "Resize": {
-            "apply": True,
-            "height": 256,
-            "width": 256
-        },
-        "CenterCrop": {
-            "apply": True,
-            "height": 224,
-            "width": 224
-        },
-        "Normalize": {
-            "apply": True
-        },
-
-    }
-
 
 @ex.named_config
 def dataset_ImageNette():
