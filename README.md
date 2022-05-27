@@ -45,8 +45,8 @@ Command lines for training and testing the models are available under `notebooks
 
 ## Datasets
 
-- [ImageNette] (https://github.com/fastai/imagenette)
-- [MURA] (https://stanfordmlgroup.github.io/competitions/mura/)
+- [ImageNette](https://github.com/fastai/imagenette)
+- [MURA](https://stanfordmlgroup.github.io/competitions/mura/)
 
 ## Download Pretrained Models
 
