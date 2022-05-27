@@ -8,7 +8,28 @@ cd vit-shapley
 pip install -r requirements.txt
 ```
 
-## Model Training
+## Getting Started
+
+### Train classifier
+
+```python
+import vit_shapley
+```
+
+### Train surrogate
+
+```python
+import vit_shapley
+```
+
+### Train explainer
+
+```python
+import vit_shapley
+
+```
+
+## Training
 
 Command lines for training and testing the models are available under `notebooks` directory.
 
