@@ -1,6 +1,7 @@
 import os
-import pandas as pd
 import random
+
+import pandas as pd
 import sklearn.model_selection
 from torch.utils.data import DataLoader
 
@@ -89,10 +90,19 @@ if __name__ == '__main__':
     transform_params = {}
 
     dataset_train = MURADataset(dataset_location="/homes/gws/chanwkim/ViT_shapley/data/MURA-v1.1/",
+                                explanation_location=None,
+                                explanation_mask_amount=None,
+                                explanation_mask_ascending=None,
                                 transform_params=transform_params, split='train')
     dataset_valid = MURADataset(dataset_location="/homes/gws/chanwkim/ViT_shapley/data/MURA-v1.1/",
+                                explanation_location=None,
+                                explanation_mask_amount=None,
+                                explanation_mask_ascending=None,
                                 transform_params=transform_params, split='val')
     dataset_test = MURADataset(dataset_location="/homes/gws/chanwkim/ViT_shapley/data/MURA-v1.1/",
+                               explanation_location=None,
+                               explanation_mask_amount=None,
+                               explanation_mask_ascending=None,
                                transform_params=transform_params, split='test')
     pd.Series([i['label'] for i in dataset_train.data]).value_counts()
     [dataset_train.df[dataset_train.df["patient"] == study]["body_part"] for study in
@@ -100,7 +110,7 @@ if __name__ == '__main__':
     # dataset_valid = MURADataset(dataset_location=None, transform_params=transform_params, split='val')
     # dataset_test = MURADataset(dataset_location=None, transform_params=transform_params, split='test')
     """
-    dataset_train: 36808//64
-    dataset_valid: 1598//64
-    dataset_test: 1599//64
+    dataset_train: 33071//64
+    dataset_valid: 3737//64
+    dataset_test: 3197//64
     """

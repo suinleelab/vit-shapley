@@ -8,30 +8,9 @@ cd vit-shapley
 pip install -r requirements.txt
 ```
 
-## Getting Started
-
-### Train classifier
-
-```python
-import vit_shapley
-```
-
-### Train surrogate
-
-```python
-import vit_shapley
-```
-
-### Train explainer
-
-```python
-import vit_shapley
-
-```
-
 ## Training
 
-Command lines for training and testing the models are available under `notebooks` directory.
+Command lines for training and testing the models are available in the files under `notebooks` directory.
 
 * notebooks/training_classifier.md
 * notebooks/training_surrogate.md
@@ -41,7 +20,8 @@ Command lines for training and testing the models are available under `notebooks
 ## Benchmarking
 
 1. Run `notebooks/2_1_benchmarking.ipynb` to obtain results.
-2. Run `notebooks/3_plotting.ipynb` to plot the results.
+2. Run `notebooks/2_2_ROAR.ipynb` to run retraining-based ROAR benchmarking.
+3. Run `notebooks/3_plotting.ipynb` to plot the results.
 
 ## Datasets
 

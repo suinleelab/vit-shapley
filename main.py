@@ -191,6 +191,7 @@ def main(_config):
                                 load_path=_config["classifier_load_path"],
                                 target_type=_config["target_type"],
                                 output_dim=_config["output_dim"],
+                                enable_pos_embed=_config["classifier_enable_pos_embed"],
 
                                 checkpoint_metric=None,
                                 optim_type=None,
