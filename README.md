@@ -1,4 +1,14 @@
-# ViT-Shapley (Shapley value estimation for Vision Transformers)
+# ViT-Shapley
+
+Shapley values are a theoretically grounded model explanation approach, but their exponential computational cost makes them difficult to use with large deep learning models. This package implements **ViT-Shapley**, an approach that makes Shapley values practical for vision transformer (ViT) models. The key idea is to learn an *amortized explainer model* that generates explanations in a single forward pass.
+
+The high-level workflow for using ViT-Shapley is the following:
+
+1. Obtain your initial ViT model
+2. If your model was not trained to acommodate held-out image patches, fine-tune it with random masking
+3. Train an explainer model using ViT-Shapley's custom loss function (often by fine-tuning parameters of the original ViT)
+
+Please see our paper [here](https://arxiv.org/abs/2206.05282?context=cs.LG) for more details, as well as the work that ViT-Shapley builds on ([KernelSHAP](https://arxiv.org/abs/1705.07874), [FastSHAP](https://openreview.net/forum?id=Zq2G_VTV53T)).
 
 ## Installation
 
@@ -10,7 +20,7 @@ pip install -r requirements.txt
 
 ## Training
 
-Command lines for training and testing the models are available in the files under `notebooks` directory.
+Commands for training and testing the models are available in the files under `notebooks` directory.
 
 * notebooks/training_classifier.md
 * notebooks/training_surrogate.md
@@ -28,9 +38,9 @@ Command lines for training and testing the models are available in the files und
 - [ImageNette](https://github.com/fastai/imagenette)
 - [MURA](https://stanfordmlgroup.github.io/competitions/mura/)
 
-## Download Pretrained Models
+<!-- ## Download Pretrained Models
 
-Download pretrained models from [here]().
+Download pretrained models from [here](). -->
 
 ## Citation
 
