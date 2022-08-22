@@ -18,7 +18,7 @@ training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate
 ```bash
 python main.py with 'stage = "surrogate"' \
 'wandb_project_name = "wandb_transformer_interpretability_project"' 'exp_name = "ImageNette_classifier_vit_base_patch16_224_lr1e-5_surrogate_lr1e-5_presoftmax"' \
-env_chanwkim 'gpus_classifier=[3]' 'gpus_surrogate=[2]' \
+env_chanwkim 'gpus_classifier=[5]' 'gpus_surrogate=[6]' \
 dataset_ImageNette \
 'classifier_backbone_type = "vit_base_patch16_224"' 'classifier_download_weight = False' 'classifier_load_path = "results/wandb_transformer_interpretability_project/2rq1issn/checkpoints/epoch=16-step=2498.ckpt"' \
 'surrogate_mask_location = "pre-softmax"' \

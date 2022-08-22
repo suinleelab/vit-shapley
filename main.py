@@ -12,6 +12,7 @@ from vit_shapley.datamodules.MURA_datamodule import MURADataModule
 from vit_shapley.modules.classifier import Classifier
 from vit_shapley.modules.classifier_masked import ClassifierMasked
 from vit_shapley.modules.explainer import Explainer
+from vit_shapley.modules.explainer_unet import ExplainerUNet
 from vit_shapley.modules.surrogate import Surrogate
 
 
@@ -232,35 +233,65 @@ def main(_config):
                               weight_decay=None,
                               decay_power=None,
                               warmup_steps=None).to(_config["gpus_surrogate"][0])
+        if _config["explainer_backbone_type"] == "unet":
+            explainer = ExplainerUNet(normalization=_config["explainer_normalization"],
+                                      normalization_class=_config["explainer_normalization_class"],
+                                      activation=_config["explainer_activation"],
+                                      surrogate=surrogate,
+                                      link=_config["explainer_link"],
+                                      backbone_type=_config["explainer_backbone_type"],
+                                      download_weight=_config['explainer_download_weight'],
+                                      load_path=_config["explainer_load_path"],
+                                      residual=_config["explainer_residual"],
+                                      target_type=_config["target_type"],
+                                      output_dim=_config["output_dim"],
 
-        explainer = Explainer(normalization=_config["explainer_normalization"],
-                              normalization_class=_config["explainer_normalization_class"],
-                              activation=_config["explainer_activation"],
-                              surrogate=surrogate,
-                              link=_config["explainer_link"],
-                              backbone_type=_config["explainer_backbone_type"],
-                              download_weight=_config['explainer_download_weight'],
-                              load_path=_config["explainer_load_path"],
-                              residual=_config["explainer_residual"],
-                              target_type=_config["target_type"],
-                              output_dim=_config["output_dim"],
+                                      explainer_head_num_attention_blocks=_config[
+                                          "explainer_head_num_attention_blocks"],
+                                      explainer_head_include_cls=_config["explainer_head_include_cls"],
+                                      explainer_head_num_mlp_layers=_config["explainer_head_num_mlp_layers"],
+                                      explainer_head_mlp_layer_ratio=_config["explainer_head_mlp_layer_ratio"],
+                                      explainer_norm=_config["explainer_norm"],
 
-                              explainer_head_num_attention_blocks=_config["explainer_head_num_attention_blocks"],
-                              explainer_head_include_cls=_config["explainer_head_include_cls"],
-                              explainer_head_num_mlp_layers=_config["explainer_head_num_mlp_layers"],
-                              explainer_head_mlp_layer_ratio=_config["explainer_head_mlp_layer_ratio"],
-                              explainer_norm=_config["explainer_norm"],
+                                      efficiency_lambda=_config["explainer_efficiency_lambda"],
+                                      efficiency_class_lambda=_config["explainer_efficiency_class_lambda"],
+                                      freeze_backbone=_config["explainer_freeze_backbone"],
 
-                              efficiency_lambda=_config["explainer_efficiency_lambda"],
-                              efficiency_class_lambda=_config["explainer_efficiency_class_lambda"],
-                              freeze_backbone=_config["explainer_freeze_backbone"],
+                                      checkpoint_metric=_config["checkpoint_metric"],
+                                      optim_type=_config["optim_type"],
+                                      learning_rate=_config["learning_rate"],
+                                      weight_decay=_config["weight_decay"],
+                                      decay_power=_config["decay_power"],
+                                      warmup_steps=_config["warmup_steps"])
+        else:
+            explainer = Explainer(normalization=_config["explainer_normalization"],
+                                  normalization_class=_config["explainer_normalization_class"],
+                                  activation=_config["explainer_activation"],
+                                  surrogate=surrogate,
+                                  link=_config["explainer_link"],
+                                  backbone_type=_config["explainer_backbone_type"],
+                                  download_weight=_config['explainer_download_weight'],
+                                  load_path=_config["explainer_load_path"],
+                                  residual=_config["explainer_residual"],
+                                  target_type=_config["target_type"],
+                                  output_dim=_config["output_dim"],
 
-                              checkpoint_metric=_config["checkpoint_metric"],
-                              optim_type=_config["optim_type"],
-                              learning_rate=_config["learning_rate"],
-                              weight_decay=_config["weight_decay"],
-                              decay_power=_config["decay_power"],
-                              warmup_steps=_config["warmup_steps"])
+                                  explainer_head_num_attention_blocks=_config["explainer_head_num_attention_blocks"],
+                                  explainer_head_include_cls=_config["explainer_head_include_cls"],
+                                  explainer_head_num_mlp_layers=_config["explainer_head_num_mlp_layers"],
+                                  explainer_head_mlp_layer_ratio=_config["explainer_head_mlp_layer_ratio"],
+                                  explainer_norm=_config["explainer_norm"],
+
+                                  efficiency_lambda=_config["explainer_efficiency_lambda"],
+                                  efficiency_class_lambda=_config["explainer_efficiency_class_lambda"],
+                                  freeze_backbone=_config["explainer_freeze_backbone"],
+
+                                  checkpoint_metric=_config["checkpoint_metric"],
+                                  optim_type=_config["optim_type"],
+                                  learning_rate=_config["learning_rate"],
+                                  weight_decay=_config["weight_decay"],
+                                  decay_power=_config["decay_power"],
+                                  warmup_steps=_config["warmup_steps"])
         model_to_train = explainer
         gpus = _config["gpus_explainer"]
     else:
