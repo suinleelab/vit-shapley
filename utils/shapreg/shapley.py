@@ -1,5 +1,5 @@
 import numpy as np
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from . import utils, games, stochastic_games
 
