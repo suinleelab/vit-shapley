@@ -9,6 +9,7 @@ from pytorch_lightning.loggers import WandbLogger
 from vit_shapley.config import ex
 from vit_shapley.datamodules.ImageNette_datamodule import ImageNetteDataModule
 from vit_shapley.datamodules.MURA_datamodule import MURADataModule
+from vit_shapley.datamodules.Pet_datamodule import PetDataModule
 from vit_shapley.modules.classifier import Classifier
 from vit_shapley.modules.classifier_masked import ClassifierMasked
 from vit_shapley.modules.explainer import Explainer
@@ -62,6 +63,8 @@ def set_datamodule(datasets,
         datamodule = MURADataModule(**dataset_parameters)
     elif datasets == "ImageNette":
         datamodule = ImageNetteDataModule(**dataset_parameters)
+    elif datasets == "Pet":
+        datamodule = PetDataModule(**dataset_parameters)
     else:
         ValueError("Invalid 'datasets' configuration")
     return datamodule

@@ -467,3 +467,79 @@ def dataset_MURA_ROAR():
         },
 
     }
+
+
+@ex.named_config
+def dataset_Pet():
+    datasets = "Pet"
+    dataset_location = f'/homes/gws/chanwkim/network_drive/{platform.node()}/pet_dataset'
+    output_dim = 37
+    target_type = "multiclass"
+    img_channels = 3
+    test_data_split = "test"
+    transforms_train = {
+        "Resize": {
+            "apply": True,
+            "height": 256,
+            "width": 256
+        },
+        "RandomResizedCrop": {
+            "apply": True,
+            "size": 224,
+            "scale": [
+                0.8,
+                1.2
+            ]
+        },
+        "VerticalFlip": {
+            "apply": True,
+            "p": 0.5
+        },
+        "HorizontalFlip": {
+            "apply": True,
+            "p": 0.5
+        },
+        "ColorJitter": {
+            "apply": True,
+            "brightness": 0.2,
+            "contrast": 0.2,
+            "saturation": 0.1,
+            "hue": 0.1,
+            "p": 0.8
+        },
+        "Normalize": {
+            "apply": True
+        },
+    }
+    transforms_val = {
+        "Resize": {
+            "apply": True,
+            "height": 256,
+            "width": 256
+        },
+        "CenterCrop": {
+            "apply": True,
+            "height": 224,
+            "width": 224
+        },
+        "Normalize": {
+            "apply": True
+        },
+
+    }
+    transforms_test = {
+        "Resize": {
+            "apply": True,
+            "height": 256,
+            "width": 256
+        },
+        "CenterCrop": {
+            "apply": True,
+            "height": 224,
+            "width": 224
+        },
+        "Normalize": {
+            "apply": True
+        },
+
+    }

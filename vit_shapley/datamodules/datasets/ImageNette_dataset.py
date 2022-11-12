@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import random
 import sklearn
+import sklearn.model_selection
 from fastai.vision.all import untar_data, URLs
 from torch.utils.data import DataLoader
 
