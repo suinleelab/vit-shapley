@@ -9,5 +9,6 @@ Pillow~=8.4.0
 pandas~=1.4.0
 scikit-learn~=1.0.2
 fastai~=2.5.3
+torchvision~=0.11.3
 pytorch-lightning~=1.5.9
 wandb~=0.12.10
