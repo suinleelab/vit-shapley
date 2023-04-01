@@ -1,7 +1,7 @@
 numpy~=1.21.2
 pandas~=1.4.0
 scikit-learn~=1.0.2
-torch~=1.10
+torch>=1.10
 torchvision~=0.11.3
 transformers~=4.16.2
 torchmetrics~=0.7.0
