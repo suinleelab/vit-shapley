@@ -46,6 +46,22 @@ dataset_ImageNette \
 training_hyperparameters_transformer 'per_gpu_batch_size = 32' 'checkpoint_metric = "loss"' 'learning_rate = 1e-4' 'max_epochs = 100'
 ```
 
+```bash
+python main-Copy1.py with 'stage = "explainer"' \
+'wandb_project_name = "wandb_transformer_interpretability_project"' 'exp_name = "ImageNette_vit_large_patch16_224_explainer_lr1e-4_additive_block1_clstrue_mlp3_ratio4_freezefalse_normtrue_softmax_acttanh"' \
+env_chanwkim 'gpus_surrogate=[0]' 'gpus_explainer=[1]' \
+dataset_ImageNette \
+'surrogate_mask_location = "pre-softmax"' \
+'surrogate_backbone_type = "vit_large_patch16_224"' 'surrogate_download_weight = False' 'surrogate_load_path = "results/wandb_transformer_interpretability_project/284sm0on/checkpoints/epoch=37-step=5585.ckpt"' \
+'explainer_num_mask_samples = 32' 'explainer_num_mask_samples_epoch = 0' 'explainer_paired_mask_samples = True' \
+'explainer_normalization = "additive"' 'explainer_normalization_class = None' 'explainer_link = "softmax"' 'explainer_head_num_attention_blocks = 1' 'explainer_head_include_cls = True' 'explainer_head_num_mlp_layers = 3' 'explainer_norm = True' 'explainer_freeze_backbone = "none"' 'explainer_head_mlp_layer_ratio = 4' 'explainer_activation="tanh"' \
+'explainer_backbone_type = "vit_large_patch16_224"' 'explainer_download_weight = False' 'explainer_load_path = "results/wandb_transformer_interpretability_project/284sm0on/checkpoints/epoch=37-step=5585.ckpt"' \
+'unfreeze_after=None' 'unfreeze_after_gradual = False' \
+training_hyperparameters_transformer 'per_gpu_batch_size = 32' 'checkpoint_metric = "loss"' 'learning_rate = 1e-4' 'max_epochs = 100'  'precision = 32'
+```
+
+
+
 ### hyperparameter choices
 
 ```bash

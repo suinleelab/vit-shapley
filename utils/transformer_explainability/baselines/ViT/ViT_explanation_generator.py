@@ -1,6 +1,6 @@
 import torch
 from numpy import *
-
+import numpy as np
 
 # compute rollout between attention layers
 def compute_rollout_attention(all_layer_matrices, start_layer=0):

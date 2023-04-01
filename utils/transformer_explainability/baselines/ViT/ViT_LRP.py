@@ -23,6 +23,9 @@ def _cfg(url='', **kwargs):
 
 default_cfgs = {
     # patch models
+    'vit_tiny_patch16_224': _cfg(
+        url='',
+    ),
     'vit_small_patch16_224': _cfg(
         url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/vit_small_p16_224-15ec54c9.pth',
     ),
@@ -441,6 +444,14 @@ def vit_small_patch16_224(pretrained=False, **kwargs):
             model, num_classes=model.num_classes, in_chans=kwargs.get('in_chans', 3), filter_fn=_conv_filter)
     return model
 
+def vit_tiny_patch16_224(pretrained=False, **kwargs):
+    model = VisionTransformer(
+        patch_size=16, embed_dim=192, depth=12, num_heads=3, qkv_bias=True, **kwargs)
+    model.default_cfg = default_cfgs['vit_tiny_patch16_224']
+    if pretrained:
+        load_pretrained(
+            model, num_classes=model.num_classes, in_chans=kwargs.get('in_chans', 3), filter_fn=_conv_filter)
+    return model
 
 def deit_small_patch16_224(pretrained=False, **kwargs):
     """ DeiT-small model @ 224x224 from paper (https://arxiv.org/abs/2012.12877).

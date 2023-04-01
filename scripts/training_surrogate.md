@@ -37,6 +37,18 @@ dataset_ImageNette \
 training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate = 1e-5' 'max_epochs = 50'
 ```
 
+```bash
+python main.py with 'stage = "surrogate"' \
+'wandb_project_name = "wandb_transformer_interpretability_project"' 'exp_name = "ImageNette_classifier_vit_large_patch16_224_lr1e-5_surrogate_lr1e-5_presoftmax"' \
+env_chanwkim 'gpus_classifier=[0]' 'gpus_surrogate=[1]' \
+dataset_ImageNette \
+'classifier_backbone_type = "vit_large_patch16_224"' 'classifier_download_weight = False' 'classifier_load_path = "results/wandb_transformer_interpretability_project/1at36lgp/checkpoints/epoch=2-step=440.ckpt"' \
+'surrogate_mask_location = "pre-softmax"' \
+'surrogate_backbone_type = "vit_large_patch16_224"' 'surrogate_download_weight = False' 'surrogate_load_path = "results/wandb_transformer_interpretability_project/1at36lgp/checkpoints/epoch=2-step=440.ckpt"' \
+training_hyperparameters_transformer 'checkpoint_metric = "loss"' 'learning_rate = 1e-5' 'max_epochs = 50'
+```
+
+
 ### MURA
 
 ```bash
