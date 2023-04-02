@@ -10,9 +10,6 @@ The high-level workflow for using ViT-Shapley is the following:
 
 Please see our paper [here](https://arxiv.org/abs/2206.05282?context=cs.LG) for more details, as well as the work that ViT-Shapley builds on ([KernelSHAP](https://arxiv.org/abs/1705.07874), [FastSHAP](https://openreview.net/forum?id=Zq2G_VTV53T)).
 
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/suinleelab/vit-shapley/blob/master/notebooks/example.ipynb)
-
 ## Installation
 
 ```bash
