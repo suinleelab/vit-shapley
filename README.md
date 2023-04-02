@@ -41,6 +41,11 @@ Commands for training and testing the models are available in the files under `n
 - [ImageNette](https://github.com/fastai/imagenette)
 - [MURA](https://stanfordmlgroup.github.io/competitions/mura/)
 
+## Model weights
+Pretrained model weights for vit-base models are available [here](https://aimslab.cs.washington.edu/vitshapley/checkpoints/).
+## Demo
+You can try out ViT Shapley using Colab [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/suinleelab/vit-shapley/blob/master/notebooks/vit-shapley-example.ipynb)
+
 <!-- ## Download Pretrained Models
 
 Download pretrained models from [here](). -->
