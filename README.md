@@ -20,12 +20,12 @@ pip install -r requirements.txt
 
 ## Training
 
-Commands for training and testing the models are available in the files under `notebooks` directory.
+Commands for training and testing the models are available in the files under `scripts` directory.
 
-* notebooks/training_classifier.md
-* notebooks/training_surrogate.md
-* notebooks/training_explainer.md
-* notebooks/training_classifier_masked.md
+* scripts/training_classifier.md
+* scripts/training_surrogate.md
+* scripts/training_explainer.md
+* scripts/training_classifier_masked.md
 
 ## Benchmarking
 
