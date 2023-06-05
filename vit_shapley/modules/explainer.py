@@ -54,7 +54,7 @@ class Explainer(pl.LightningModule):
                  efficiency_class_lambda,
                  freeze_backbone: bool, checkpoint_metric: str or None,
                  optim_type: str or None, learning_rate: float or None, weight_decay: float or None,
-                 decay_power: str or None, warmup_steps: int or None):
+                 decay_power: str or None, warmup_steps: int or None, load_path_state_dict=False):
 
         super().__init__()
         self.save_hyperparameters()
@@ -176,8 +176,11 @@ class Explainer(pl.LightningModule):
             raise NotImplementedError("'explainer_head' is only implemented for VisionTransformer.")
         # Load checkpoints
         if self.hparams.load_path is not None:
-            checkpoint = torch.load(self.hparams.load_path, map_location="cpu")
-            state_dict = checkpoint["state_dict"]
+            if load_path_state_dict:
+                state_dict = torch.load(self.hparams.load_path, map_location="cpu")
+            else:
+                checkpoint = torch.load(self.hparams.load_path, map_location="cpu")
+                state_dict = checkpoint["state_dict"]                
             ret = self.load_state_dict(state_dict, strict=False)
             self.logger_.info(f"Model parameters were updated from a checkpoint file {self.hparams.load_path}")
             self.logger_.info(f"Unmatched parameters - missing_keys:    {ret.missing_keys}")
