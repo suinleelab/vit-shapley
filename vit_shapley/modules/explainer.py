@@ -1,17 +1,17 @@
-import copy
+from typing import Union
+
 import ipdb
-import logging
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from torchvision import models as cnn_models
 
+from vit_shapley.modules.base_model import BaseModel
 import vit_shapley.modules.vision_transformer as vit
 from vit_shapley.modules import explainer_utils
 
 
-class Explainer(pl.LightningModule):
+class Explainer(BaseModel):
     """
     `pytorch_lightning` module for surrogate
 
@@ -19,11 +19,6 @@ class Explainer(pl.LightningModule):
         normalization: 'additive' or 'multiplicative'
         normalization_class: 'additive',
         activation:
-        backbone_type: should be the class name defined in `torchvision.models.cnn_models` or `timm.models.vision_transformer`
-        download_weight: whether to initialize backbone with the pretrained weights
-        load_path: If not None. loads the weights saved in the checkpoint to the model
-        target_type: `binary` or `multi-class` or `multi-label`
-        output_dim: the dimension of output,
 
         explainer_head_num_attention_blocks:
         explainer_head_include_cls:
@@ -36,59 +31,28 @@ class Explainer(pl.LightningModule):
         efficiency_lambda: lambda hyperparameter for efficiency penalty.
         efficiency_class_lambda: lambda hyperparameter for efficiency penalty.
         freeze_backbone: whether to freeze the backbone while training
-        checkpoint_metric: the metric used to determine whether to save the current status as checkpoints during the validation phase
-        optim_type: type of optimizer for optimizing parameters
-        learning_rate: learning rate of optimizer
-        weight_decay: weight decay of optimizer
-        decay_power: only `cosine` annealing scheduler is supported currently
-        warmup_steps: parameter for the `cosine` annealing scheduler
     """
 
-    def __init__(self, normalization, normalization_class, activation, backbone_type: str, download_weight: bool,
-                 load_path: str or None,
-                 residual: list,
-                 target_type: str, output_dim: int,
-                 explainer_head_num_attention_blocks: int, explainer_head_include_cls: bool,
-                 explainer_head_num_mlp_layers: int, explainer_head_mlp_layer_ratio: bool, explainer_norm: bool,
-                 surrogate: pl.LightningModule, link: pl.LightningModule or nn.Module or None, efficiency_lambda,
-                 efficiency_class_lambda,
-                 freeze_backbone: bool, checkpoint_metric: str or None,
-                 optim_type: str or None, learning_rate: float or None, weight_decay: float or None,
-                 decay_power: str or None, warmup_steps: int or None, load_path_state_dict=False):
+    def __init__(self,
+                 normalization = "additive",
+                 normalization_class = None,
+                 activation = "tanh",
+                 residual: list = [],
+                 explainer_head_num_attention_blocks: int = 1,
+                 explainer_head_include_cls: bool = True,
+                 explainer_head_num_mlp_layers: int = 3,
+                 explainer_head_mlp_layer_ratio: bool = 4,
+                 explainer_norm: bool = True,
+                 surrogate: pl.LightningModule = None,
+                 link: str = "softmax",
+                 efficiency_lambda: float = 0.0,
+                 efficiency_class_lambda: float = 0.0,
+                 freeze_backbone: str = 'none', 
+                 *args, **kwargs):
 
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.save_hyperparameters()
         self.__null = None
-
-        self.logger_ = logging.getLogger(__name__)
-
-        assert not (self.hparams.download_weight and self.hparams.load_path is not None), \
-            "'download_weight' and 'load_path' cannot be activated at the same time as the downloaded weight will be overwritten by weights in 'load_path'."
-
-        # Backbone initialization. (currently support only vit and cnn)
-        if hasattr(vit, self.hparams.backbone_type):
-            self.backbone = getattr(vit, self.hparams.backbone_type)(pretrained=self.hparams.download_weight)
-        elif hasattr(cnn_models, self.hparams.backbone_type):
-            self.backbone = getattr(cnn_models, self.hparams.backbone_type)(pretrained=self.hparams.download_weight)
-        else:
-            raise NotImplementedError("Not supported backbone type")
-        if self.hparams.download_weight:
-            self.logger_.info("The backbone parameters were initialized with the downloaded pretrained weights.")
-        else:
-            self.logger_.info("The backbone parameters were randomly initialized.")
-
-        # Nullify classification head built in the backbone module and rebuild.
-        if self.backbone.__class__.__name__ == 'VisionTransformer':
-            head_in_features = self.backbone.head.in_features
-            self.backbone.head = nn.Identity()
-        elif self.backbone.__class__.__name__ == 'ResNet':
-            head_in_features = self.backbone.fc.in_features
-            self.backbone.fc = nn.Identity()
-        elif self.backbone.__class__.__name__ == 'DenseNet':
-            head_in_features = self.backbone.classifier.in_features
-            self.backbone.classifier = nn.Identity()
-        else:
-            raise NotImplementedError("Not supported backbone type")
 
         if self.backbone.__class__.__name__ == 'VisionTransformer':
             # attention_blocks
@@ -174,17 +138,9 @@ class Explainer(pl.LightningModule):
 
         else:
             raise NotImplementedError("'explainer_head' is only implemented for VisionTransformer.")
+        
         # Load checkpoints
-        if self.hparams.load_path is not None:
-            if load_path_state_dict:
-                state_dict = torch.load(self.hparams.load_path, map_location="cpu")
-            else:
-                checkpoint = torch.load(self.hparams.load_path, map_location="cpu")
-                state_dict = checkpoint["state_dict"]                
-            ret = self.load_state_dict(state_dict, strict=False)
-            self.logger_.info(f"Model parameters were updated from a checkpoint file {self.hparams.load_path}")
-            self.logger_.info(f"Unmatched parameters - missing_keys:    {ret.missing_keys}")
-            self.logger_.info(f"Unmatched parameters - unexpected_keys: {ret.unexpected_keys}")
+        self.load_checkpoint()
 
         # Set up link function
         if self.hparams.link is None:
@@ -414,10 +370,7 @@ class Explainer(pl.LightningModule):
 
         # self.hparams.surrogate.backbone.norm = nn.Identity()
 
-    def configure_optimizers(self):
-        return explainer_utils.set_schedule(self)
-
-    def null(self, images: torch.Tensor or None = None) -> torch.Tensor:
+    def null(self, images: Union[torch.Tensor, None] = None) -> torch.Tensor:
         """
         calculate or load cached null
 

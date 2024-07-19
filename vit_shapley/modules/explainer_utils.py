@@ -1,39 +1,6 @@
 import torch
 from torch.nn import functional as F
 from torchmetrics import MeanMetric
-from transformers import get_cosine_schedule_with_warmup
-from transformers.optimization import AdamW
-
-
-def set_schedule(pl_module):
-    optimizer = None
-    if pl_module.hparams.optim_type == "Adamw":
-        optimizer = AdamW(params=pl_module.parameters(), lr=pl_module.hparams.learning_rate,
-                          weight_decay=pl_module.hparams.weight_decay)
-    elif pl_module.hparams.optim_type == "Adam":
-        optimizer = torch.optim.Adam(pl_module.parameters(), lr=pl_module.hparams.learning_rate,
-                                     weight_decay=pl_module.hparams.weight_decay)
-    elif pl_module.hparams.optim_type == "SGD":
-        optimizer = torch.optim.SGD(pl_module.parameters(), lr=pl_module.hparams.learning_rate, momentum=0.9,
-                                    weight_decay=pl_module.hparams.weight_decay)
-
-    if pl_module.trainer.max_steps is None or pl_module.trainer.max_steps == -1:
-        max_steps = (
-                len(pl_module.trainer.datamodule.train_dataloader()) * pl_module.trainer.max_epochs // pl_module.trainer.accumulate_grad_batches)
-    else:
-        max_steps = pl_module.trainer.max_steps
-
-    if pl_module.hparams.decay_power == "cosine":
-        scheduler = {"scheduler": get_cosine_schedule_with_warmup(optimizer,
-                                                                  num_warmup_steps=pl_module.hparams.warmup_steps,
-                                                                  num_training_steps=max_steps),
-                     "interval": "step"}
-        return ([optimizer], [scheduler],)
-    elif pl_module.hparams.decay_power is None:
-        return optimizer
-    else:
-
-        NotImplementedError("Only cosine scheduler is implemented for now")
 
 
 def set_metrics(pl_module):

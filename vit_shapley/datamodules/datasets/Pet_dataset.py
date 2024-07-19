@@ -3,6 +3,7 @@ import pandas as pd
 import random
 import sklearn
 import sklearn.model_selection
+from fastai.vision.all import untar_data, URLs
 import os
 from torch.utils.data import DataLoader
 
@@ -66,7 +67,8 @@ class PetDataset(BaseDataset):
 
     def get_data_list(self):
         # Load files containing labels, and perform train/valid split if necessary
-        data=pd.read_csv(os.path.join(self.dataset_location, "annotations/list.txt"), sep=' ', skiprows=[0,1,2,3,4,5], names=["classid","species","breed"])
+        path = untar_data(URLs.PETS)
+        data=pd.read_csv(os.path.join(path, "annotations/list.txt"), sep=' ', skiprows=[0,1,2,3,4,5], names=["classid","species","breed"])
         idx_train, idx_valtest = sklearn.model_selection.train_test_split(data.index, random_state=44, test_size=0.2)
         idx_val, idx_test = sklearn.model_selection.train_test_split(idx_valtest, random_state=44, test_size=0.5)
 
@@ -83,7 +85,7 @@ class PetDataset(BaseDataset):
         #labels = data["classid"].astype(int)-1 #data['noisy_labels_0'].map(lambda x: self.labels.index(x))
         labels = data.index.map(lambda x: "_".join(x.split('_')[:-1])).map(lambda x: self.labels.index(x))
 
-        img_paths = data.index.map(lambda x: str(os.path.join(os.path.join(self.dataset_location, "images/"),x))+".jpg").values.tolist()
+        img_paths = data.index.map(lambda x: str(os.path.join(os.path.join(path, "images/"),x))+".jpg").values.tolist()
         data_list = [{'img_path': img_path, 'label': label, 'dataset': self.__class__.__name__}
                      for img_path, label in zip(img_paths, labels)]
         random.Random(42).shuffle(data_list)
