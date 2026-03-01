@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vit-shapley"
+version = "0.1.0"
+description = "ViT-Shapley: Shapley value explanations for Vision Transformers"
+requires-python = ">=3.10,<3.11"
+license = {text = "TBD"}
+
+# NOTE: torch and torchvision are NOT listed here.
+# They must be installed separately with the correct CUDA variant.
+# See README.md for installation instructions.
+dependencies = [
+    "timm>=1.0.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyterlab",
+    "ipywidgets",
+    "pre-commit",
+    "ruff",
+    "pytest",
+    "matplotlib>=3.7",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

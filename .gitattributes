@@ -1,0 +1,9 @@
+# Ensure consistent line endings
+* text=auto
+
+# Default: strip outputs
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb
+
+# Exceptions: keep outputs
+scripts/*.ipynb -filter -diff
