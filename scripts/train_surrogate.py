@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import SurrogateConfig, load_config
-from vit_shapley.data import get_imagenette_dataset
+from vit_shapley.data import get_dataset
 from vit_shapley.models import build_vit_classifier, build_vit_surrogate
 from vit_shapley.training import train_surrogate
 
@@ -65,11 +65,11 @@ def main() -> None:
     print(f"Using device: {device} (classifier: {classifier_device})")
 
     print("Loading datasets …")
-    train_dataset = get_imagenette_dataset(
-        root=cfg.data_root, split="train", image_size=cfg.image_size, download=True
+    train_dataset = get_dataset(
+        cfg.dataset, root=cfg.data_root, split="train", image_size=cfg.image_size, download=True
     )
-    val_dataset = get_imagenette_dataset(
-        root=cfg.data_root, split="val", image_size=cfg.image_size, download=False
+    val_dataset = get_dataset(
+        cfg.dataset, root=cfg.data_root, split="val", image_size=cfg.image_size, download=False
     )
 
     train_loader = DataLoader(

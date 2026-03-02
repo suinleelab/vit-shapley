@@ -47,15 +47,26 @@ def _load_env(path: str | Path) -> dict[str, str]:
     return env
 
 
+_VAR_RE = re.compile(r"\$\{(\w+)\}|\$(\w+)")
+
+
 def _resolve_variables(data: dict, defaults: dict | None = None) -> dict:
     """Replace ``$var`` / ``${var}`` placeholders in string values.
 
     Resolution order for each variable name:
 
-    1. *defaults* dict (from a ``.env`` file).
-    2. Environment variables (``os.environ``).
+    1. The *data* dict itself (self-referencing: ``${dataset}`` resolves from
+       the ``dataset`` key in the same config).
+    2. *defaults* dict (from a ``.env`` file).
+    3. Environment variables (``os.environ``).
 
-    Raises :class:`ValueError` if any variables remain unresolved.
+    Multi-pass resolution (up to 10 passes) handles transitive chains where
+    one variable's value depends on another variable that is also being
+    resolved (e.g. ``A → B → C``).  A variable does not resolve from its
+    own key (``save_dir: ${save_dir}`` would look elsewhere).
+
+    Raises :class:`ValueError` if any variables remain unresolved after all
+    passes, including cycle detection.
 
     Parameters
     ----------
@@ -72,29 +83,56 @@ def _resolve_variables(data: dict, defaults: dict | None = None) -> dict:
     Raises
     ------
     ValueError
-        If any ``$var`` references could not be resolved from *defaults* or
-        the environment.
+        If any ``$var`` references could not be resolved.
     """
-    lookup = defaults or {}
+    ext_lookup = defaults or {}
+    resolved = dict(data)
+    max_passes = 10
+
+    for _ in range(max_passes):
+        still_has_vars = False
+
+        for key, value in resolved.items():
+            if not isinstance(value, str):
+                continue
+            if not _VAR_RE.search(value):
+                continue
+
+            def _replace(match: re.Match, _key: str = key) -> str:
+                var_name = match.group(1) or match.group(2)
+                # Skip self-referencing same key
+                if var_name == _key:
+                    return match.group(0)
+                # 1. Config data dict itself (highest priority)
+                if var_name in resolved:
+                    candidate = resolved[var_name]
+                    if isinstance(candidate, str) and _VAR_RE.search(candidate):
+                        # Still unresolved — leave for next pass
+                        return match.group(0)
+                    return str(candidate)
+                # 2. .env defaults
+                if var_name in ext_lookup:
+                    return str(ext_lookup[var_name])
+                # 3. Environment variables
+                env_val = os.environ.get(var_name)
+                if env_val is not None:
+                    return env_val
+                return match.group(0)
+
+            resolved[key] = _VAR_RE.sub(_replace, value)
+
+            if _VAR_RE.search(resolved[key]):
+                still_has_vars = True
+
+        if not still_has_vars:
+            break
+
+    # Check for unresolved variables
     unresolved: set[str] = set()
-
-    def _replace(match: re.Match) -> str:
-        var_name = match.group(1) or match.group(2)
-        if var_name in lookup:
-            return str(lookup[var_name])
-        env_val = os.environ.get(var_name)
-        if env_val is not None:
-            return env_val
-        unresolved.add(var_name)
-        return match.group(0)
-
-    resolved = {}
-    for key, value in data.items():
+    for key, value in resolved.items():
         if isinstance(value, str):
-            # Match ${var_name} or $var_name (word chars only)
-            resolved[key] = re.sub(r"\$\{(\w+)\}|\$(\w+)", _replace, value)
-        else:
-            resolved[key] = value
+            for m in _VAR_RE.finditer(value):
+                unresolved.add(m.group(1) or m.group(2))
 
     if unresolved:
         names = ", ".join(sorted(unresolved))
@@ -123,11 +161,14 @@ def load_config(
     overrides:
         List of ``KEY=VALUE`` strings that override YAML values.
         Values are auto-cast: int, float, bool (true/false), then str.
+        Overrides are applied **before** variable resolution so that e.g.
+        ``--set dataset=pet`` participates in resolving ``${dataset}``
+        in other values.
     env_path:
-        Optional path to a ``.env`` file (``KEY=VALUE`` lines).  If provided,
-        ``$var`` and ``${var}`` placeholders in config string values are
-        resolved using the env file, with real environment variables as
-        fallback.  ``--set`` overrides apply last.
+        Optional path to a ``.env`` file (``KEY=VALUE`` lines).  Variables
+        (``$var`` / ``${var}``) in config values are resolved using:
+        config self-references first, then the env file, then real
+        environment variables.
 
     Returns
     -------
@@ -137,16 +178,16 @@ def load_config(
     with open(config_path) as f:
         data = yaml.safe_load(f) or {}
 
-    # Resolve $variable placeholders (.env file > env vars > error)
-    defaults = None
-    if env_path is not None and Path(env_path).is_file():
-        defaults = _load_env(env_path)
-    # Always resolve: even without an env file, env vars are checked.
-    data = _resolve_variables(data, defaults)
-
-    # Overrides apply last (raw values, no variable resolution)
+    # Overrides apply BEFORE variable resolution so that e.g.
+    # --set dataset=pet participates in resolving ${dataset} in other values.
     for kv in overrides or []:
         key, val = kv.split("=", 1)
         data[key] = _parse_value(val)
+
+    # Resolve $variable placeholders (config self-ref > .env file > env vars)
+    defaults = None
+    if env_path is not None and Path(env_path).is_file():
+        defaults = _load_env(env_path)
+    data = _resolve_variables(data, defaults)
 
     return config_cls.model_validate(data)

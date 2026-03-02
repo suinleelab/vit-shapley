@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class ExplainerConfig(BaseModel):
     # Required — no default. Must be provided in YAML or via --set.
     surrogate_ckpt: str
+    dataset: str = "imagenette"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     model_name: str = "vit_base_patch16_224"
     epochs: int = 100

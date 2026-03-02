@@ -31,25 +31,9 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import VisualizeConfig, load_config
-from vit_shapley.data import get_imagenette_dataset
+from vit_shapley.data import get_dataset
 from vit_shapley.models import build_vit_explainer, build_vit_surrogate
 from vit_shapley.visualization import compute_shapley_values, plot_shapley_heatmaps
-
-# Human-readable class names in the reference class-to-index ordering
-# (see IMAGENETTE_CLASSES in src/vit_shapley/data/imagenette.py)
-IMAGENETTE_CLASS_NAMES = [
-    "Cassette player",  # 0  n02979186
-    "Garbage truck",  # 1  n03417042
-    "Tench",  # 2  n01440764
-    "English springer",  # 3  n02102040
-    "Church",  # 4  n03028079
-    "Parachute",  # 5  n03888257
-    "French horn",  # 6  n03394916
-    "Chain saw",  # 7  n03000684
-    "Golf ball",  # 8  n03445777
-    "Gas pump",  # 9  n03425413
-]
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -83,7 +67,8 @@ def main() -> None:
 
     # ------------------------------------------------------------------ data --
     print("Loading dataset …")
-    dataset = get_imagenette_dataset(
+    dataset = get_dataset(
+        cfg.dataset,
         root=cfg.data_root,
         split=cfg.split,
         image_size=cfg.image_size,
@@ -108,8 +93,9 @@ def main() -> None:
                 class_cols.append(lbl)
 
     print(f"Sample indices : {cfg.sample_indices}")
-    print(f"GT labels      : {[IMAGENETTE_CLASS_NAMES[l] for l in labels_list]}")
-    print(f"Heatmap classes: {[IMAGENETTE_CLASS_NAMES[c] for c in class_cols]}")
+    class_names = dataset.classes
+    print(f"GT labels      : {[class_names[l] for l in labels_list]}")
+    print(f"Heatmap classes: {[class_names[c] for c in class_cols]}")
 
     # --------------------------------------------------------------- models --
     print(f"Loading surrogate  from {cfg.surrogate_ckpt} …")
@@ -145,7 +131,7 @@ def main() -> None:
         labels_list=labels_list,
         phi=phi,
         class_cols=class_cols,
-        class_names=IMAGENETTE_CLASS_NAMES,
+        class_names=class_names,
         image_size=cfg.image_size,
         grand_probs=grand_probs,
     )

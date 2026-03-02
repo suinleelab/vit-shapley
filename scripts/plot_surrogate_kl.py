@@ -44,7 +44,7 @@ _COLOR_ZERO = np.array([227, 26, 28]) / 256  # Paired index 5
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import PlotConfig, load_config
-from vit_shapley.data import get_imagenette_dataset
+from vit_shapley.data import get_dataset
 from vit_shapley.evaluation import compute_kl_vs_cardinality
 from vit_shapley.models import build_vit_classifier, build_vit_surrogate
 
@@ -102,8 +102,8 @@ def main() -> None:
 
     # ------------------------------------------------------------------ data --
     print("Loading validation dataset …")
-    val_dataset = get_imagenette_dataset(
-        root=cfg.data_root, split="val", image_size=224, download=False
+    val_dataset = get_dataset(
+        cfg.dataset, root=cfg.data_root, split="val", image_size=224, download=False
     )
     indices = list(range(min(cfg.num_images, len(val_dataset))))
     subset = Subset(val_dataset, indices)
@@ -171,9 +171,12 @@ def main() -> None:
         (base_zero, "Zero input – classifier", _COLOR_ZERO, "-"),
     ]
 
+    mask_seed = cfg.seed
+
     print(
         f"Computing KL vs. cardinality "
-        f"(step={cfg.step}, masks_per_cardinality={cfg.num_masks}) …"
+        f"(step={cfg.step}, masks_per_cardinality={cfg.num_masks}, "
+        f"mask_seed={mask_seed}) …"
     )
 
     # ── rcParams (reference style) ─────────────────────────────────────────
@@ -197,6 +200,7 @@ def main() -> None:
             num_masks_per_cardinality=cfg.num_masks,
             cardinality_step=cfg.step,
             device=device,
+            seed=mask_seed,
         )
         cardinalities = sorted(results.keys())
         num_deleted = np.array([num_patches - c for c in cardinalities])
@@ -234,7 +238,7 @@ def main() -> None:
 
     ax.set_xlabel("# of Deleted Patches", labelpad=10)
     ax.set_ylabel("KL divergence")
-    ax.set_title("ImageNette", pad=10)
+    ax.set_title(cfg.dataset.capitalize(), pad=10)
     ax.set_xlim(-2, num_patches + 2)
 
     fig.legend(
@@ -256,5 +260,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
     main()

@@ -1,11 +1,11 @@
-# REQUIRED: update all three checkpoint paths to your trained models
-classifier_ckpt: $checkpoint_dir/classifier/best_classifier.pth
-attn_surrogate_ckpt: $checkpoint_dir/surrogate_attn/best_surrogate.pth
-zero_surrogate_ckpt: $checkpoint_dir/surrogate_zero/best_surrogate.pth
+dataset: imagenette
+classifier_ckpt: $checkpoint_dir/classifier_${dataset}/best_classifier.pth
+attn_surrogate_ckpt: $checkpoint_dir/surrogate_attn_${dataset}/best_surrogate.pth
+zero_surrogate_ckpt: $checkpoint_dir/surrogate_zero_${dataset}/best_surrogate.pth
 model_name: vit_base_patch16_224
 data_root: $data_dir
 num_images: 100
 num_masks: 50
 step: 4
-output: figures/surrogate_kl.png
+output: figures/surrogate_kl_${dataset}.png
 device: "cuda:0"

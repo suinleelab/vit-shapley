@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class SurrogateConfig(BaseModel):
     # Required — no default. Must be provided in YAML or via --set.
     classifier_ckpt: str
+    dataset: str = "imagenette"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     model_name: str = "vit_base_patch16_224"
     masking_strategy: str = "attn_mask"

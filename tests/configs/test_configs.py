@@ -19,6 +19,7 @@ from vit_shapley.configs import (
 class TestClassifierConfig:
     def test_defaults(self):
         cfg = ClassifierConfig()
+        assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.pretrained is True
         assert cfg.epochs == 25
@@ -32,8 +33,13 @@ class TestClassifierConfig:
         assert cfg.use_amp is True
         assert cfg.device == ""
 
+    def test_dataset_pet(self):
+        cfg = ClassifierConfig(dataset="pet")
+        assert cfg.dataset == "pet"
+
     def test_full_construction(self):
         cfg = ClassifierConfig(
+            dataset="pet",
             data_root="/data",
             model_name="vit_tiny_patch16_224",
             pretrained=False,
@@ -48,6 +54,7 @@ class TestClassifierConfig:
             use_amp=False,
             device="cpu",
         )
+        assert cfg.dataset == "pet"
         assert cfg.model_name == "vit_tiny_patch16_224"
         assert cfg.pretrained is False
         assert cfg.epochs == 10
@@ -66,6 +73,7 @@ class TestSurrogateConfig:
 
     def test_defaults(self):
         cfg = SurrogateConfig(classifier_ckpt="ckpt.pth")
+        assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.masking_strategy == "attn_mask"
         assert cfg.epochs == 50
@@ -96,6 +104,7 @@ class TestExplainerConfig:
 
     def test_defaults(self):
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth")
+        assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.epochs == 100
         assert cfg.batch_size == 64
@@ -166,6 +175,7 @@ class TestPlotConfig:
             attn_surrogate_ckpt="attn.pth",
             zero_surrogate_ckpt="zero.pth",
         )
+        assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.num_images == 50
         assert cfg.num_masks == 50
@@ -211,6 +221,7 @@ class TestVisualizeConfig:
 
     def test_defaults(self):
         cfg = VisualizeConfig(surrogate_ckpt="surr.pth", explainer_ckpt="exp.pth")
+        assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.split == "val"
         assert cfg.sample_indices == [0, 1, 2, 3]

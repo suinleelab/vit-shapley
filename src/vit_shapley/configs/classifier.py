@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class ClassifierConfig(BaseModel):
+    dataset: str = "imagenette"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     model_name: str = "vit_base_patch16_224"
     pretrained: bool = True

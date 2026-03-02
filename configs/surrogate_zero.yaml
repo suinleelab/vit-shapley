@@ -1,5 +1,5 @@
-# REQUIRED: update to point at your Stage 1 checkpoint
-classifier_ckpt: $checkpoint_dir/classifier/best_classifier.pth
+dataset: imagenette
+classifier_ckpt: $checkpoint_dir/classifier_${dataset}/best_classifier.pth
 data_root: $data_dir
 model_name: vit_base_patch16_224
 masking_strategy: zero_input
@@ -10,7 +10,7 @@ weight_decay: 1.0e-5
 warmup_steps: 500
 num_workers: 4
 image_size: 224
-save_dir: $checkpoint_dir/surrogate_zero
+save_dir: $checkpoint_dir/surrogate_zero_${dataset}
 use_amp: true
 device: "cuda:0"
 classifier_device: "cuda:0"

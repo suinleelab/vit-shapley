@@ -1,5 +1,5 @@
-# REQUIRED: update to point at your Stage 2 surrogate checkpoint
-surrogate_ckpt: $checkpoint_dir/surrogate_attn/best_surrogate.pth
+dataset: imagenette
+surrogate_ckpt: $checkpoint_dir/surrogate_attn_${dataset}/best_surrogate.pth
 data_root: $data_dir
 model_name: vit_base_patch16_224
 epochs: 100
@@ -13,7 +13,7 @@ gradient_accumulation_steps: 4
 masking_strategy: attn_mask
 num_workers: 4
 image_size: 224
-save_dir: $checkpoint_dir/explainer
+save_dir: $checkpoint_dir/explainer_${dataset}
 use_amp: true
 device: "cuda:0"
 surrogate_device: "cuda:1"

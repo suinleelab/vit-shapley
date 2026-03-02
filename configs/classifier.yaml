@@ -1,3 +1,4 @@
+dataset: imagenette
 data_root: $data_dir
 model_name: vit_base_patch16_224
 pretrained: true
@@ -8,6 +9,6 @@ weight_decay: 1.0e-5
 warmup_steps: 500
 num_workers: 4
 image_size: 224
-save_dir: $checkpoint_dir/classifier
+save_dir: $checkpoint_dir/classifier_${dataset}
 use_amp: true
 device: "cuda:0"

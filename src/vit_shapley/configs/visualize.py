@@ -9,6 +9,7 @@ class VisualizeConfig(BaseModel):
     # Required — no defaults. Must be provided in YAML or via --set.
     surrogate_ckpt: str
     explainer_ckpt: str
+    dataset: str = "imagenette"
     model_name: str = "vit_base_patch16_224"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     split: str = "val"

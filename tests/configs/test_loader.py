@@ -7,6 +7,7 @@ import pytest
 
 from vit_shapley.configs import ClassifierConfig, SurrogateConfig
 from vit_shapley.configs.loader import (
+    _VAR_RE,
     _load_env,
     _parse_value,
     _resolve_variables,
@@ -426,3 +427,127 @@ class TestLoadConfigEnv:
         cfg_file.write_text("data_root: $nonexistent_var\nepochs: 5\n")
         with pytest.raises(ValueError, match="nonexistent_var"):
             load_config(ClassifierConfig, cfg_file)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_variables — self-referencing (config keys reference other keys)
+# ---------------------------------------------------------------------------
+
+
+class TestSelfReferencing:
+    """Tests for config values that reference other config keys."""
+
+    def test_basic_self_ref(self):
+        """A value can reference another key in the same config dict."""
+        data = {"dataset": "imagenette", "save_dir": "checkpoints/${dataset}"}
+        result = _resolve_variables(data)
+        assert result["save_dir"] == "checkpoints/imagenette"
+        assert result["dataset"] == "imagenette"
+
+    def test_basic_self_ref_dollar_syntax(self):
+        """$var syntax also works for self-referencing."""
+        data = {"dataset": "pet", "save_dir": "checkpoints/$dataset"}
+        result = _resolve_variables(data)
+        assert result["save_dir"] == "checkpoints/pet"
+
+    def test_multiple_self_refs_in_one_value(self):
+        """Multiple self-references in a single value."""
+        data = {
+            "dataset": "imagenette",
+            "stage": "classifier",
+            "save_dir": "ckpts/${stage}_${dataset}",
+        }
+        result = _resolve_variables(data)
+        assert result["save_dir"] == "ckpts/classifier_imagenette"
+
+    def test_skip_same_key(self):
+        """A key does not resolve from itself (avoids infinite loop)."""
+        data = {"save_dir": "${save_dir}/sub"}
+        # save_dir references itself — falls through to external lookup
+        with pytest.raises(ValueError, match="save_dir"):
+            _resolve_variables(data)
+
+    def test_transitive_chain(self):
+        """A → B → C transitive resolution across multiple passes."""
+        data = {
+            "base": "root",
+            "mid": "${base}/middle",
+            "leaf": "${mid}/end",
+        }
+        result = _resolve_variables(data)
+        assert result["base"] == "root"
+        assert result["mid"] == "root/middle"
+        assert result["leaf"] == "root/middle/end"
+
+    def test_self_ref_priority_over_env_defaults(self):
+        """Config data dict takes priority over .env defaults."""
+        data = {"dataset": "imagenette", "save_dir": "ckpts/${dataset}"}
+        defaults = {"dataset": "pet_from_env"}
+        result = _resolve_variables(data, defaults)
+        assert result["save_dir"] == "ckpts/imagenette"
+
+    def test_falls_back_to_env_defaults_when_not_in_data(self):
+        """If not in config dict, falls back to .env defaults."""
+        data = {"save_dir": "ckpts/${dataset}"}
+        defaults = {"dataset": "pet"}
+        result = _resolve_variables(data, defaults)
+        assert result["save_dir"] == "ckpts/pet"
+
+    def test_mixed_self_ref_and_env(self):
+        """Mix of self-referencing and .env variables."""
+        data = {
+            "dataset": "imagenette",
+            "save_dir": "$checkpoint_dir/classifier_${dataset}",
+        }
+        defaults = {"checkpoint_dir": "checkpoints"}
+        result = _resolve_variables(data, defaults)
+        assert result["save_dir"] == "checkpoints/classifier_imagenette"
+
+    def test_cycle_detection_raises(self):
+        """Circular references raise ValueError."""
+        data = {"a": "${b}", "b": "${a}"}
+        with pytest.raises(ValueError):
+            _resolve_variables(data)
+
+    def test_non_string_self_ref(self):
+        """Non-string config values are cast to str when referenced."""
+        data = {"num_classes": 10, "label": "classes_${num_classes}"}
+        result = _resolve_variables(data)
+        assert result["label"] == "classes_10"
+
+    def test_override_before_resolution_end_to_end(self, tmp_path):
+        """--set dataset=pet modifies config BEFORE ${dataset} is resolved."""
+        cfg_file = tmp_path / "cfg.yaml"
+        cfg_file.write_text(
+            "dataset: imagenette\n"
+            "save_dir: checkpoints/classifier_${dataset}\n"
+        )
+        cfg = load_config(
+            ClassifierConfig, cfg_file, overrides=["dataset=pet"]
+        )
+        assert cfg.dataset == "pet"
+        assert cfg.save_dir == "checkpoints/classifier_pet"
+
+    def test_override_before_resolution_with_env(self, tmp_path):
+        """--set + .env + self-ref all work together."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("checkpoint_dir=ckpts\n")
+        cfg_file = tmp_path / "cfg.yaml"
+        cfg_file.write_text(
+            "dataset: imagenette\n"
+            "save_dir: $checkpoint_dir/classifier_${dataset}\n"
+        )
+        cfg = load_config(
+            ClassifierConfig,
+            cfg_file,
+            overrides=["dataset=pet"],
+            env_path=env_file,
+        )
+        assert cfg.dataset == "pet"
+        assert cfg.save_dir == "ckpts/classifier_pet"
+
+    def test_var_re_pattern_exported(self):
+        """_VAR_RE is the compiled pattern used for variable matching."""
+        assert _VAR_RE.search("${foo}") is not None
+        assert _VAR_RE.search("$foo") is not None
+        assert _VAR_RE.search("no_vars") is None

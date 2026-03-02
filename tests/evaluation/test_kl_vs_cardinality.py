@@ -90,9 +90,36 @@ class TestSampleFixedCardinalityMasks:
         with pytest.raises(ValueError):
             sample_fixed_cardinality_masks(self.B, self.P, num_masked=num_masked)
 
+    def test_generator_reproducibility(self):
+        """Same generator seed produces identical masks."""
+        g1 = torch.Generator().manual_seed(99)
+        g2 = torch.Generator().manual_seed(99)
+        m1 = sample_fixed_cardinality_masks(self.B, self.P, 4, generator=g1)
+        m2 = sample_fixed_cardinality_masks(self.B, self.P, 4, generator=g2)
+        assert torch.equal(m1, m2)
+
+    def test_generator_differs_from_no_generator(self):
+        """Generator-based masks differ from two ungoverned calls (with high
+        probability), confirming the generator actually controls randomness."""
+        g = torch.Generator().manual_seed(123)
+        m_seeded = sample_fixed_cardinality_masks(self.B, self.P, 4, generator=g)
+        # Two unseeded calls should (almost certainly) not match.
+        m_a = sample_fixed_cardinality_masks(self.B, self.P, 4)
+        m_b = sample_fixed_cardinality_masks(self.B, self.P, 4)
+        # At least one pair should differ.
+        assert not torch.equal(m_a, m_b) or not torch.equal(m_seeded, m_a)
+
+    def test_generator_sequential_calls_differ(self):
+        """Two calls with the *same* generator object yield different masks
+        (the generator state advances)."""
+        g = torch.Generator().manual_seed(0)
+        m1 = sample_fixed_cardinality_masks(self.B, self.P, 4, generator=g)
+        m2 = sample_fixed_cardinality_masks(self.B, self.P, 4, generator=g)
+        assert not torch.equal(m1, m2)
+
 
 # ---------------------------------------------------------------------------
-# TestComputeKlVsCardinality  (7 tests)
+# TestComputeKlVsCardinality  (7 + seed tests)
 # ---------------------------------------------------------------------------
 
 
@@ -182,3 +209,124 @@ class TestComputeKlVsCardinality:
         assert all(math.isclose(v, 0.0, abs_tol=1e-5) for v in kl_at_zero), (
             f"Expected KL ≈ 0 at cardinality 0, got {kl_at_zero}"
         )
+
+    # ---- seed reproducibility tests ----------------------------------------
+
+    def test_seed_produces_identical_results(self, clf, images):
+        """Two calls with the same seed must give exactly the same KL values."""
+        surrogate = _IdentitySurrogate(clf)
+        surrogate.eval()
+        kwargs = dict(
+            surrogate=surrogate,
+            classifier=clf,
+            images=images,
+            num_patches=self.NUM_PATCHES,
+            num_masks_per_cardinality=self.K,
+            cardinality_step=3,
+            device=torch.device("cpu"),
+        )
+        r1 = compute_kl_vs_cardinality(**kwargs, seed=42)
+        r2 = compute_kl_vs_cardinality(**kwargs, seed=42)
+        assert r1.keys() == r2.keys()
+        for m in r1:
+            for v1, v2 in zip(r1[m], r2[m]):
+                assert math.isclose(v1, v2, abs_tol=1e-7), (
+                    f"Mismatch at cardinality {m}: {v1} vs {v2}"
+                )
+
+    def test_different_seeds_give_different_results(self, clf, images):
+        """Different seeds should (with overwhelming probability) yield
+        different KL values at non-trivial cardinalities."""
+        num_p = self.NUM_PATCHES
+
+        class _NoisySurrogate(nn.Module):
+            """Returns different logits depending on the mask content."""
+
+            def __init__(self):
+                super().__init__()
+                self.fc = nn.Linear(num_p, 4)
+
+            def forward(self, x, patch_mask=None):
+                # Mix mask into output so mask differences affect KL.
+                return self.fc(patch_mask)
+
+        noisy = _NoisySurrogate()
+        noisy.eval()
+        kwargs = dict(
+            surrogate=noisy,
+            classifier=clf,
+            images=images,
+            num_patches=num_p,
+            num_masks_per_cardinality=self.K,
+            cardinality_step=3,
+            device=torch.device("cpu"),
+        )
+        r1 = compute_kl_vs_cardinality(**kwargs, seed=1)
+        r2 = compute_kl_vs_cardinality(**kwargs, seed=2)
+        # At cardinalities 0 and num_patches masks are deterministic (all-ones
+        # / all-zeros), so only intermediate cardinalities can differ.
+        any_diff = any(
+            not math.isclose(v1, v2, abs_tol=1e-7)
+            for m in r1
+            for v1, v2 in zip(r1[m], r2[m])
+        )
+        assert any_diff, "Different seeds produced identical results"
+
+    def test_seed_independent_of_global_rng(self, clf, images):
+        """Seeded calls should not be affected by global torch RNG state."""
+        surrogate = _IdentitySurrogate(clf)
+        surrogate.eval()
+        kwargs = dict(
+            surrogate=surrogate,
+            classifier=clf,
+            images=images,
+            num_patches=self.NUM_PATCHES,
+            num_masks_per_cardinality=self.K,
+            cardinality_step=3,
+            device=torch.device("cpu"),
+            seed=7,
+        )
+        torch.manual_seed(0)
+        r1 = compute_kl_vs_cardinality(**kwargs)
+        torch.manual_seed(999)
+        r2 = compute_kl_vs_cardinality(**kwargs)
+        for m in r1:
+            for v1, v2 in zip(r1[m], r2[m]):
+                assert math.isclose(v1, v2, abs_tol=1e-7)
+
+    def test_same_seed_different_surrogates_use_same_masks(self, clf, images):
+        """Two *different* surrogates called with the same seed must see the
+        exact same mask sequence—verified by a mask-recording surrogate."""
+
+        recorded_masks: list[list[torch.Tensor]] = [[], []]
+
+        class _RecordingSurrogate(nn.Module):
+            def __init__(self, idx, inner_clf):
+                super().__init__()
+                self._idx = idx
+                self._clf = inner_clf
+
+            def forward(self, x, patch_mask=None):
+                recorded_masks[self._idx].append(patch_mask.clone())
+                return self._clf(x)
+
+        s0 = _RecordingSurrogate(0, clf)
+        s1 = _RecordingSurrogate(1, clf)
+        s0.eval()
+        s1.eval()
+
+        kwargs = dict(
+            classifier=clf,
+            images=images,
+            num_patches=self.NUM_PATCHES,
+            num_masks_per_cardinality=self.K,
+            cardinality_step=3,
+            device=torch.device("cpu"),
+            seed=123,
+        )
+        compute_kl_vs_cardinality(surrogate=s0, **kwargs)
+        compute_kl_vs_cardinality(surrogate=s1, **kwargs)
+
+        assert len(recorded_masks[0]) == len(recorded_masks[1])
+        for m0, m1 in zip(recorded_masks[0], recorded_masks[1]):
+            assert torch.equal(m0, m1), "Masks differ between surrogates!"

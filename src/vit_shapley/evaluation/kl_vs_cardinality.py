@@ -18,6 +18,7 @@ def sample_fixed_cardinality_masks(
     num_patches: int,
     num_masked: int,
     device: Optional[torch.device] = None,
+    generator: Optional[torch.Generator] = None,
 ) -> torch.Tensor:
     """Sample binary patch masks with exactly ``num_masked`` zeros per row.
 
@@ -26,6 +27,7 @@ def sample_fixed_cardinality_masks(
         num_patches: Total number of patches (e.g. 196 for 14×14 grid).
         num_masked: Number of patches to mask (set to 0) per sample.
         device: Target device for the output tensor.
+        generator: Optional :class:`torch.Generator` for reproducible sampling.
 
     Returns:
         Float tensor ``(batch_size, num_patches)`` with values in ``{0.0, 1.0}``.
@@ -42,7 +44,9 @@ def sample_fixed_cardinality_masks(
 
     masks = torch.ones(batch_size, num_patches, device=device)
     if num_masked > 0:
-        perm = torch.rand(batch_size, num_patches, device=device).argsort(dim=1)
+        perm = torch.rand(
+            batch_size, num_patches, device=device, generator=generator
+        ).argsort(dim=1)
         masks.scatter_(1, perm[:, :num_masked], 0.0)
     return masks
 
@@ -56,6 +60,7 @@ def compute_kl_vs_cardinality(
     num_masks_per_cardinality: int = 50,
     cardinality_step: int = 10,
     device: Optional[torch.device] = None,
+    seed: Optional[int] = None,
 ) -> dict[int, list[float]]:
     """Compute per-sample KL divergence for each mask cardinality.
 
@@ -66,6 +71,12 @@ def compute_kl_vs_cardinality(
 
     where ``x_s`` is the image with m patches masked.
 
+    When ``seed`` is provided, mask sampling is fully deterministic via a
+    dedicated :class:`torch.Generator`.  Calling this function with the same
+    ``seed`` (and identical ``num_patches``, ``num_masks_per_cardinality``,
+    ``cardinality_step``, and batch size) produces exactly the same masks,
+    making it safe to compare different surrogates on equal footing.
+
     Args:
         surrogate: :class:`~vit_shapley.models.SurrogateViT` instance in eval mode.
         classifier: Frozen classifier (timm ViT) in eval mode.
@@ -74,6 +85,8 @@ def compute_kl_vs_cardinality(
         num_masks_per_cardinality: Number of random masks to draw per cardinality.
         cardinality_step: Step size between cardinalities.
         device: Device for mask tensors (defaults to ``images.device``).
+        seed: Optional RNG seed.  When set, mask generation is deterministic
+            and independent of the global RNG state.
 
     Returns:
         Dictionary mapping each cardinality (int) to a list of per-sample KL
@@ -82,6 +95,11 @@ def compute_kl_vs_cardinality(
     """
     if device is None:
         device = images.device
+
+    generator: Optional[torch.Generator] = None
+    if seed is not None:
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed(seed)
 
     # Compute teacher probabilities once (full image, no masking).
     teacher_probs = classifier(images).softmax(dim=-1)  # (N, C)
@@ -97,7 +115,9 @@ def compute_kl_vs_cardinality(
     for m in cardinalities:
         for _ in range(num_masks_per_cardinality):
             # Sample one mask per image in the batch.
-            mask = sample_fixed_cardinality_masks(N, num_patches, m, device=device)
+            mask = sample_fixed_cardinality_masks(
+                N, num_patches, m, device=device, generator=generator
+            )
             # surrogate expects patch_mask (B, num_patches).
             surrogate_logits = surrogate(images, patch_mask=mask)
             surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)  # (N, C)
