@@ -165,10 +165,10 @@ def main() -> None:
 
     # ----------------------------------------------------------- evaluation --
     series = [
-        (surr_attn, "Attn mask – surrogate", _COLOR_ATTN, "--"),
-        (base_attn, "Attn mask – classifier", _COLOR_ATTN, "-"),
-        (surr_zero, "Zero input – surrogate", _COLOR_ZERO, "--"),
-        (base_zero, "Zero input – classifier", _COLOR_ZERO, "-"),
+        (surr_attn, "Attn mask (finetuned)", _COLOR_ATTN, "--"),
+        (base_attn, "Attn mask", _COLOR_ATTN, "-"),
+        (surr_zero, "Zero input (finetuned)", _COLOR_ZERO, "--"),
+        (base_zero, "Zero input", _COLOR_ZERO, "-"),
     ]
 
     mask_seed = cfg.seed
@@ -203,7 +203,7 @@ def main() -> None:
             seed=mask_seed,
         )
         cardinalities = sorted(results.keys())
-        num_deleted = np.array([num_patches - c for c in cardinalities])
+        num_deleted = np.array(cardinalities)
         means = np.array([np.mean(results[m]) for m in cardinalities])
         stds = np.array([np.std(results[m], ddof=1) for m in cardinalities])
         ns = np.array([len(results[m]) for m in cardinalities])

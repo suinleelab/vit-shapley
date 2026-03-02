@@ -98,7 +98,7 @@ def compute_kl_vs_cardinality(
 
     generator: Optional[torch.Generator] = None
     if seed is not None:
-        generator = torch.Generator(device="cpu")
+        generator = torch.Generator(device=device)
         generator.manual_seed(seed)
 
     # Compute teacher probabilities once (full image, no masking).

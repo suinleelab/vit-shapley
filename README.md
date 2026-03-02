@@ -19,9 +19,9 @@ pip install captum           # optional: gradient baselines
 ## Pipeline
 
 ```text
-Stage 1: Classifier          Obtain your initial ViT image classifier
+Stage 1: Classifier          Obtain your initial ViT image classifier to explain
               |
-Stage 2: Surrogate           Train a surrogate that mimics the classifier on masked inputs
+Stage 2: Surrogate           If your model was not trained to acommodate held-out image patches, fine-tune it with random masking
               |
 Stage 3: Explainer            Train an explainer that produces Shapley values in one forward pass
 ```
