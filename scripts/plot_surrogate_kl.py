@@ -16,13 +16,11 @@ patches.
 
 Example
 -------
-    python scripts/plot_surrogate_kl.py \\
-        --classifier-ckpt  checkpoints/classifier/best_classifier.pth \\
-        --attn-surrogate-ckpt checkpoints/surrogate_attn/best_surrogate.pth \\
-        --zero-surrogate-ckpt checkpoints/surrogate_zero/best_surrogate.pth \\
-        --model-name vit_tiny_patch16_224 \\
-        --num-images 50 --num-masks 50 --step 10 \\
-        --output figures/surrogate_kl.png
+    python scripts/plot_surrogate_kl.py --config configs/plot_surrogate_kl.yaml
+
+    # Quick override:
+    python scripts/plot_surrogate_kl.py --config configs/plot_surrogate_kl.yaml \\
+        --set model_name=vit_tiny_patch16_224 num_images=50 num_masks=50
 """
 
 import argparse
@@ -38,77 +36,10 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from vit_shapley.configs import PlotConfig, load_config
 from vit_shapley.data import get_imagenette_dataset
 from vit_shapley.evaluation import compute_kl_vs_cardinality
 from vit_shapley.models import build_vit_classifier, build_vit_surrogate
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Plot surrogate KL divergence vs. mask cardinality (Figure 2).",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--classifier-ckpt",
-        type=str,
-        required=True,
-        help="Path to best_classifier.pth (Stage 1 output).",
-    )
-    parser.add_argument(
-        "--attn-surrogate-ckpt",
-        type=str,
-        required=True,
-        help="Path to best_surrogate.pth trained with attn_mask strategy.",
-    )
-    parser.add_argument(
-        "--zero-surrogate-ckpt",
-        type=str,
-        required=True,
-        help="Path to best_surrogate.pth trained with zero_input strategy.",
-    )
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="vit_base_patch16_224",
-        help="timm model name (must match all checkpoints).",
-    )
-    parser.add_argument(
-        "--data-root",
-        type=str,
-        default="/local-b/chanwkim/vit-shapley-data",
-        help="Root directory for ImageNette data.",
-    )
-    parser.add_argument(
-        "--num-images",
-        type=int,
-        default=50,
-        help="Number of validation images to use.",
-    )
-    parser.add_argument(
-        "--num-masks",
-        type=int,
-        default=50,
-        help="Number of random masks to sample per cardinality.",
-    )
-    parser.add_argument(
-        "--step",
-        type=int,
-        default=10,
-        help="Cardinality step size (patches).",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="figures/surrogate_kl.png",
-        help="Output path for the saved figure.",
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="",
-        help="Device string (e.g. 'cuda', 'cpu'). Auto-detected if empty.",
-    )
-    return parser.parse_args()
 
 
 def _load_surrogate_ckpt(surrogate, ckpt_path: str) -> None:
@@ -133,11 +64,29 @@ def _load_classifier_into_surrogate(surrogate, ckpt_path: str) -> None:
 
 
 def main() -> None:
-    args = parse_args()
+    parser = argparse.ArgumentParser(
+        description="Plot surrogate KL divergence vs. mask cardinality (Figure 2).",
+    )
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument(
+        "--env",
+        type=str,
+        default=".env",
+        help="Path to .env file for $variable resolution (default: .env).",
+    )
+    parser.add_argument(
+        "--set",
+        nargs="*",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Override config values, e.g. --set num_images=100 step=5",
+    )
+    args = parser.parse_args()
+    cfg = load_config(PlotConfig, args.config, args.set, env_path=args.env)
 
     device = (
-        torch.device(args.device)
-        if args.device
+        torch.device(cfg.device)
+        if cfg.device
         else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
     print(f"Using device: {device}")
@@ -145,11 +94,11 @@ def main() -> None:
     # ------------------------------------------------------------------ data --
     print("Loading validation dataset …")
     val_dataset = get_imagenette_dataset(
-        root=args.data_root, split="val", image_size=224, download=False
+        root=cfg.data_root, split="val", image_size=224, download=False
     )
-    indices = list(range(min(args.num_images, len(val_dataset))))
+    indices = list(range(min(cfg.num_images, len(val_dataset))))
     subset = Subset(val_dataset, indices)
-    loader = DataLoader(subset, batch_size=args.num_images, shuffle=False, num_workers=2)
+    loader = DataLoader(subset, batch_size=cfg.num_images, shuffle=False, num_workers=2)
     images, _ = next(iter(loader))
     images = images.to(device)
     print(f"  {images.shape[0]} images loaded.")
@@ -157,44 +106,44 @@ def main() -> None:
     # --------------------------------------------------------------- models --
     num_classes = len(val_dataset.classes)
 
-    print(f"Loading classifier from {args.classifier_ckpt} …")
+    print(f"Loading classifier from {cfg.classifier_ckpt} …")
     classifier = build_vit_classifier(
-        model_name=args.model_name, num_classes=num_classes, pretrained=False
+        model_name=cfg.model_name, num_classes=num_classes, pretrained=False
     )
-    ckpt = torch.load(args.classifier_ckpt, map_location="cpu", weights_only=True)
+    ckpt = torch.load(cfg.classifier_ckpt, map_location="cpu", weights_only=True)
     classifier.load_state_dict(ckpt.get("model_state_dict", ckpt))
     classifier.to(device).eval()
 
     # Line 1 (blue solid): attn_mask + fine-tuned surrogate weights
-    print(f"Loading attn_mask surrogate from {args.attn_surrogate_ckpt} …")
+    print(f"Loading attn_mask surrogate from {cfg.attn_surrogate_ckpt} …")
     surr_attn = build_vit_surrogate(
-        model_name=args.model_name, num_classes=num_classes, masking_strategy="attn_mask"
+        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="attn_mask"
     )
-    _load_surrogate_ckpt(surr_attn, args.attn_surrogate_ckpt)
+    _load_surrogate_ckpt(surr_attn, cfg.attn_surrogate_ckpt)
     surr_attn.to(device).eval()
 
     # Line 2 (blue dotted): attn_mask + classifier weights (un-finetuned baseline)
     print(f"Loading attn_mask baseline (classifier weights) …")
     base_attn = build_vit_surrogate(
-        model_name=args.model_name, num_classes=num_classes, masking_strategy="attn_mask"
+        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="attn_mask"
     )
-    _load_classifier_into_surrogate(base_attn, args.classifier_ckpt)
+    _load_classifier_into_surrogate(base_attn, cfg.classifier_ckpt)
     base_attn.to(device).eval()
 
     # Line 3 (red solid): zero_input + fine-tuned surrogate weights
-    print(f"Loading zero_input surrogate from {args.zero_surrogate_ckpt} …")
+    print(f"Loading zero_input surrogate from {cfg.zero_surrogate_ckpt} …")
     surr_zero = build_vit_surrogate(
-        model_name=args.model_name, num_classes=num_classes, masking_strategy="zero_input"
+        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="zero_input"
     )
-    _load_surrogate_ckpt(surr_zero, args.zero_surrogate_ckpt)
+    _load_surrogate_ckpt(surr_zero, cfg.zero_surrogate_ckpt)
     surr_zero.to(device).eval()
 
     # Line 4 (red dotted): zero_input + classifier weights (un-finetuned baseline)
     print(f"Loading zero_input baseline (classifier weights) …")
     base_zero = build_vit_surrogate(
-        model_name=args.model_name, num_classes=num_classes, masking_strategy="zero_input"
+        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="zero_input"
     )
-    _load_classifier_into_surrogate(base_zero, args.classifier_ckpt)
+    _load_classifier_into_surrogate(base_zero, cfg.classifier_ckpt)
     base_zero.to(device).eval()
 
     # Infer num_patches from any of the surrogate models.
@@ -211,7 +160,7 @@ def main() -> None:
 
     print(
         f"Computing KL vs. cardinality "
-        f"(step={args.step}, masks_per_cardinality={args.num_masks}) …"
+        f"(step={cfg.step}, masks_per_cardinality={cfg.num_masks}) …"
     )
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -223,8 +172,8 @@ def main() -> None:
             classifier=classifier,
             images=images,
             num_patches=num_patches,
-            num_masks_per_cardinality=args.num_masks,
-            cardinality_step=args.step,
+            num_masks_per_cardinality=cfg.num_masks,
+            cardinality_step=cfg.step,
             device=device,
         )
         cardinalities = sorted(results.keys())
@@ -247,14 +196,14 @@ def main() -> None:
     ax.set_ylabel("KL divergence", fontsize=13)
     ax.set_title(
         f"KL Divergence vs. Mask Cardinality\n"
-        f"({args.model_name}, {images.shape[0]} images, {args.num_masks} masks)",
+        f"({cfg.model_name}, {images.shape[0]} images, {cfg.num_masks} masks)",
         fontsize=12,
     )
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
 
-    output_path = Path(args.output)
+    output_path = Path(cfg.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150)
     print(f"Figure saved to {output_path}")

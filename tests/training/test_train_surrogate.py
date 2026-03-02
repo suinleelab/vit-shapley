@@ -406,3 +406,52 @@ class TestTrainSurrogate:
             surrogate, tiny_classifier, val_loader, device, val_seed=0
         )["loss"]
         assert abs(h1["val_loss"][0] - val_loss_direct) < 1e-6
+
+    def test_classifier_device_param_accepted(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+        """classifier_device kwarg should be accepted and produce valid results."""
+        history = train_surrogate(
+            tiny_surrogate, tiny_classifier, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, classifier_device=device,
+            save_dir=None, use_amp=False,
+        )
+        assert "train_loss" in history
+        assert history["train_loss"][0] > 0.0
+
+    def test_classifier_device_none_defaults_to_device(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+        """classifier_device=None should produce identical results to omitting it."""
+        surrogate1 = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
+        surrogate2 = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
+        # Sync weights
+        surrogate2.load_state_dict(surrogate1.state_dict())
+        classifier2 = build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
+        classifier2.load_state_dict(tiny_classifier.state_dict())
+
+        torch.manual_seed(0)
+        h1 = train_surrogate(
+            surrogate1, tiny_classifier, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+        )
+        torch.manual_seed(0)
+        h2 = train_surrogate(
+            surrogate2, classifier2, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, classifier_device=None,
+            save_dir=None, use_amp=False,
+        )
+        assert abs(h1["val_loss"][0] - h2["val_loss"][0]) < 1e-6
+
+    def test_train_one_epoch_classifier_device_param(self, tiny_surrogate, tiny_classifier, train_loader, device):
+        """train_one_epoch_surrogate accepts classifier_device kwarg."""
+        optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
+        metrics = train_one_epoch_surrogate(
+            tiny_surrogate, tiny_classifier, train_loader, optimizer, device,
+            classifier_device=device,
+        )
+        assert "loss" in metrics
+
+    def test_evaluate_classifier_device_param(self, tiny_surrogate, tiny_classifier, val_loader, device):
+        """evaluate_surrogate accepts classifier_device kwarg."""
+        metrics = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device,
+            classifier_device=device,
+        )
+        assert "loss" in metrics

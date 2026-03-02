@@ -11,6 +11,7 @@ from vit_shapley.training.train_surrogate import (
 )
 from vit_shapley.training.train_explainer import (
     shapley_kernel_weights,
+    sample_shapley_masks,
     train_one_epoch_explainer,
     evaluate_explainer,
     train_explainer,
@@ -25,6 +26,7 @@ __all__ = [
     "evaluate_surrogate",
     "train_surrogate",
     "shapley_kernel_weights",
+    "sample_shapley_masks",
     "train_one_epoch_explainer",
     "evaluate_explainer",
     "train_explainer",

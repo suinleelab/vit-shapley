@@ -1,0 +1,13 @@
+data_root: $data_dir
+model_name: vit_base_patch16_224
+pretrained: true
+epochs: 25
+batch_size: 64
+lr: 1.0e-5
+weight_decay: 1.0e-5
+warmup_steps: 500
+num_workers: 4
+image_size: 224
+save_dir: $checkpoint_dir/classifier
+use_amp: true
+device: ""

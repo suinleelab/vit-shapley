@@ -6,16 +6,12 @@ Please see [our paper (arXiv:2206.05282)](https://arxiv.org/abs/2206.05282?conte
 
 ## Overview
 
-ViT-Shapley follows a multi-stage training pipeline:
-
 ```text
-Stage 1: Classifier          Train a ViT image classifier
+Stage 1: Classifier          Obtain your initial ViT image classifier
               |
 Stage 2: Surrogate           Train a surrogate that mimics the classifier on masked inputs
               |
 Stage 3: Explainer            Train an explainer that produces Shapley values in one forward pass
-              |
-Stage 4: Classifier Masked   (Optional) Fine-tune classifier to handle masked patches
 ```
 
 Each stage produces a checkpoint that feeds into the next. The final explainer generates per-patch importance scores (196 values for a 14x14 patch grid) without the exponential cost of exact Shapley computation.
@@ -34,180 +30,58 @@ conda activate vit-shapley
 # Example for CUDA 12.x (driver >= 525):
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
-# Install the package and remaining dependencies (timm, numpy, tqdm)
+# Install the package and remaining dependencies (timm, numpy, tqdm, pydantic, pyyaml)
 pip install -e .
 
 # (Optional) Install development tools (jupyterlab, pytest, ruff, etc.)
 pip install -e ".[dev]"
 ```
 
-## Testing
+## Quick Start
 
-Run the full test suite:
+```bash
+# Stage 1: Train classifier
+python scripts/train_classifier.py --config configs/classifier.yaml
+
+# Stage 2: Train surrogates (one per masking strategy)
+python scripts/train_surrogate.py --config configs/surrogate.yaml \
+    --set masking_strategy=attn_mask save_dir=checkpoints/surrogate_attn
+python scripts/train_surrogate.py --config configs/surrogate.yaml \
+    --set masking_strategy=zero_input save_dir=checkpoints/surrogate_zero
+
+# Stage 3: Train explainer
+python scripts/train_explainer.py --config configs/explainer.yaml
+
+# Evaluate: KL divergence plot
+python scripts/plot_surrogate_kl.py --config configs/plot_surrogate_kl.yaml
+
+# Visualise: Shapley heatmaps
+python scripts/visualize_explainer.py --config configs/visualize_explainer.yaml
+```
+
+### Variable Resolution
+
+Config YAML files use `$data_dir` and `$checkpoint_dir` variables (shell-style syntax). These are resolved automatically from a `.env` file in the project root:
+
+```bash
+# .env
+data_dir=/sdata/chanwkim/vit-shapley-data
+checkpoint_dir=checkpoints
+```
+
+Scripts load `.env` by default — no extra flags needed. You can also point to a different file with `--env path/to/other.env`, or use shell environment variables instead (`.env` values take priority over shell env vars).
+
+Override any config value with `--set KEY=VALUE` (e.g. `--set epochs=10 lr=1e-4`). `--set` overrides apply last and take final precedence.
+
+## Testing
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-Run a specific test file:
+## Documentation
 
-```bash
-python -m pytest tests/test_config.py -v
-python -m pytest tests/modules/test_explainer.py -v
-```
-
-## Training Pipeline
-
-### Stage 1: Train the Classifier
-
-Train a ViT image classifier on ImageNette. The dataset is downloaded automatically
-on first run into `--data-root` (default: `/local-b/chanwkim/vit-shapley-data`).
-
-```bash
-# Quick test with the smallest ViT
-python scripts/train_classifier.py \
-    --model-name vit_tiny_patch16_224 \
-    --epochs 10 \
-    --batch-size 64 \
-    --save-dir checkpoints/classifier
-
-# Full run with ViT-Base
-python scripts/train_classifier.py \
-    --model-name vit_base_patch16_224 \
-    --pretrained \
-    --epochs 10 \
-    --batch-size 64 \
-    --lr 1e-3 \
-    --weight-decay 1e-2 \
-    --num-workers 4 \
-    --image-size 224 \
-    --save-dir checkpoints/classifier
-```
-
-The best checkpoint (by validation accuracy) is saved to
-`<save-dir>/best_classifier.pth`. Run `python scripts/train_classifier.py --help`
-for all options.
-
-### Stage 2: Train the Surrogate
-
-Fine-tune a surrogate model that learns to mimic the classifier on randomly
-masked subsets of patches. Requires the Stage 1 classifier checkpoint.
-
-The surrogate is initialised from the classifier checkpoint and trained by
-minimising `DKL(f(x) || g(x_s))` over random patch subsets `s` (Eq. 2 of the
-paper). timm's native `attn_mask` support is used — no custom attention modules
-are required.
-
-Train **two** surrogates — one per masking strategy. They are independent and
-can be run in parallel (e.g. in separate tmux panes or on separate GPUs).
-
-```bash
-# attn_mask surrogate (attention-bias masking)
-python scripts/train_surrogate.py \
-    --model-name vit_tiny_patch16_224 \
-    --classifier-ckpt checkpoints/classifier/best_classifier.pth \
-    --masking-strategy attn_mask \
-    --epochs 50 \
-    --batch-size 64 \
-    --save-dir checkpoints/surrogate_attn
-
-# zero_input surrogate (zero-pixel masking)
-python scripts/train_surrogate.py \
-    --model-name vit_tiny_patch16_224 \
-    --classifier-ckpt checkpoints/classifier/best_classifier.pth \
-    --masking-strategy zero_input \
-    --epochs 50 \
-    --batch-size 64 \
-    --save-dir checkpoints/surrogate_zero
-```
-
-Full run with ViT-Base (paper defaults: `lr=1e-5`, 50 epochs):
-
-```bash
-python scripts/train_surrogate.py \
-    --model-name vit_base_patch16_224 \
-    --classifier-ckpt checkpoints/classifier/best_classifier.pth \
-    --masking-strategy attn_mask \
-    --epochs 50 --batch-size 64 --lr 1e-5 --weight-decay 1e-2 --num-workers 4 \
-    --save-dir checkpoints/surrogate_attn
-
-python scripts/train_surrogate.py \
-    --model-name vit_base_patch16_224 \
-    --classifier-ckpt checkpoints/classifier/best_classifier.pth \
-    --masking-strategy zero_input \
-    --epochs 50 --batch-size 64 --lr 1e-5 --weight-decay 1e-2 --num-workers 4 \
-    --save-dir checkpoints/surrogate_zero
-```
-
-The best checkpoint (by minimum validation KL divergence) is saved to
-`<save-dir>/best_surrogate.pth`.
-
-### Stage 3: Train the Explainer
-
-Train an explainer that produces per-patch Shapley value estimates in a single
-forward pass, without the exponential cost of exact Shapley computation.
-
-The explainer is initialised from a Stage 2 surrogate checkpoint and trained
-by minimising the weighted least-squares (WLS) objective (Eq. 3 of the
-ViT-Shapley paper):
-
-    L(φ) = E_{x,S} [ w(|S|) · ‖v(S;x) − v(∅;x) − Σ_{i∈S} φ_i(x)‖² ]
-
-where `v(S;x)` is the frozen surrogate's softmax output on masked subset `S`,
-`w(|S|)` is the Shapley kernel weight, and `φ_i(x)` are the per-patch
-Shapley value predictions.
-
-```bash
-# Quick test with the smallest ViT
-python scripts/train_explainer.py \
-    --surrogate-ckpt checkpoints/surrogate_attn/best_surrogate.pth \
-    --model-name vit_tiny_patch16_224 \
-    --epochs 50 --batch-size 64 \
-    --save-dir checkpoints/explainer
-
-# Full run with ViT-Base (paper defaults: lr=1e-5, 50 epochs)
-python scripts/train_explainer.py \
-    --surrogate-ckpt checkpoints/surrogate_attn/best_surrogate.pth \
-    --model-name vit_base_patch16_224 \
-    --epochs 50 --batch-size 64 --lr 1e-5 --weight-decay 1e-2 --num-workers 4 \
-    --save-dir checkpoints/explainer
-```
-
-The best checkpoint (by minimum validation WLS loss) is saved to
-`<save-dir>/best_explainer.pth`.
-Run `python scripts/train_explainer.py --help` for all options.
-
-## Evaluation
-
-### Figure 2: KL Divergence vs. Mask Cardinality
-
-Reproduces Figure 2 of the ViT-Shapley paper. Plots four lines:
-
-| Line | Strategy | Weights |
-|---|---|---|
-| Blue solid | `attn_mask` | fine-tuned surrogate |
-| Blue dotted | `attn_mask` | original classifier (un-finetuned baseline) |
-| Red solid | `zero_input` | fine-tuned surrogate |
-| Red dotted | `zero_input` | original classifier (un-finetuned baseline) |
-
-Each line shows mean KL(classifier(full_image) ∥ surrogate(masked_image)) with
-a shaded 95% confidence interval. Requires Stage 1 and both Stage 2 checkpoints.
-
-```bash
-# Install matplotlib (if not already installed via [dev])
-pip install -e ".[dev]"
-
-# Generate figure
-python scripts/plot_surrogate_kl.py \
-    --classifier-ckpt     checkpoints/classifier/best_classifier.pth \
-    --attn-surrogate-ckpt checkpoints/surrogate_attn/best_surrogate.pth \
-    --zero-surrogate-ckpt checkpoints/surrogate_zero/best_surrogate.pth \
-    --model-name vit_tiny_patch16_224 \
-    --num-images 50 \
-    --num-masks 50 \
-    --step 10 \
-    --output figures/surrogate_kl.png
-```
-
-The figure is saved to `--output` (default: `figures/surrogate_kl.png`).
-Run `python scripts/plot_surrogate_kl.py --help` for all options.
+- [Config System](docs/config.md) — YAML configs, `--set` overrides, multi-GPU device placement
+- [Training Pipeline](docs/training.md) — detailed Stage 1/2/3 instructions and architecture notes
+- [Evaluation](docs/evaluation.md) — KL divergence plots and Shapley heatmap visualisation
+- [Baselines](docs/baselines.md) — attention, perturbation, and gradient explanation baselines

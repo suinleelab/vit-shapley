@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-"""CLI entry point for Stage 2: fine-tune a ViT surrogate on ImageNette.
+"""CLI entry point for Stage 3: train a ViT explainer on ImageNette.
 
-The surrogate is initialised from a Stage 1 classifier checkpoint and then
-fine-tuned to handle randomly masked image patches via attention masking,
-minimising the KL divergence between the classifier and surrogate outputs
-(Eq. 2 of the ViT-Shapley paper, ICLR 2023).
+The explainer is initialised from a Stage 2 surrogate checkpoint and then
+trained to produce per-patch Shapley value estimates in a single forward pass.
+Training minimises a scaled MSE objective with masks sampled from the Shapley
+distribution (ViT-Shapley paper, ICLR 2023).
 
 Example
 -------
-    python scripts/train_surrogate.py --config configs/surrogate.yaml
+    python scripts/train_explainer.py --config configs/explainer.yaml
 
     # Quick override:
-    python scripts/train_surrogate.py --config configs/surrogate.yaml \\
-        --set model_name=vit_tiny_patch16_224 epochs=50 save_dir=checkpoints/surrogate_attn
+    python scripts/train_explainer.py --config configs/explainer.yaml \\
+        --set model_name=vit_tiny_patch16_224 epochs=100 lr=1e-4
 """
 
 import argparse
@@ -24,15 +24,15 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from vit_shapley.configs import SurrogateConfig, load_config
+from vit_shapley.configs import ExplainerConfig, load_config
 from vit_shapley.data import get_imagenette_dataset
-from vit_shapley.models import build_vit_classifier, build_vit_surrogate
-from vit_shapley.training import train_surrogate
+from vit_shapley.models import build_vit_surrogate, build_vit_explainer
+from vit_shapley.training import train_explainer
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train a ViT surrogate on ImageNette (Stage 2 of ViT-Shapley).",
+        description="Train a ViT explainer on ImageNette (Stage 3 of ViT-Shapley).",
     )
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
     parser.add_argument(
@@ -46,18 +46,18 @@ def main() -> None:
         nargs="*",
         default=[],
         metavar="KEY=VALUE",
-        help="Override config values, e.g. --set lr=1e-3 epochs=50",
+        help="Override config values, e.g. --set lr=1e-4 epochs=100",
     )
     args = parser.parse_args()
-    cfg = load_config(SurrogateConfig, args.config, args.set, env_path=args.env)
+    cfg = load_config(ExplainerConfig, args.config, args.set, env_path=args.env)
 
     device = (
         torch.device(cfg.device)
         if cfg.device
         else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
-    classifier_device = torch.device(cfg.classifier_device) if cfg.classifier_device else device
-    print(f"Using device: {device} (classifier: {classifier_device})")
+    surrogate_device = torch.device(cfg.surrogate_device) if cfg.surrogate_device else device
+    print(f"Using device: {device} (surrogate: {surrogate_device})")
 
     print("Loading datasets …")
     train_dataset = get_imagenette_dataset(
@@ -87,43 +87,46 @@ def main() -> None:
     num_classes = len(train_dataset.classes)
     print(f"Classes ({num_classes}): {train_dataset.classes}")
 
-    # Build surrogate (initialised from classifier checkpoint).
-    print(f"Building surrogate: {cfg.model_name} (masking={cfg.masking_strategy})")
+    # Build frozen surrogate from the Stage 2 checkpoint.
+    print(f"Loading surrogate from: {cfg.surrogate_ckpt}")
     surrogate = build_vit_surrogate(
         model_name=cfg.model_name,
         num_classes=num_classes,
-        classifier_ckpt_path=cfg.classifier_ckpt,
-        masking_strategy=cfg.masking_strategy,
+        classifier_ckpt_path=None,
+        masking_strategy="attn_mask",
     )
+    ckpt = torch.load(cfg.surrogate_ckpt, map_location="cpu", weights_only=True)
+    sd = ckpt.get("model_state_dict", ckpt)
+    surrogate.load_state_dict(sd)
 
-    # Build a separate frozen classifier instance to serve as the teacher.
-    print(f"Loading classifier teacher from: {cfg.classifier_ckpt}")
-    classifier = build_vit_classifier(
+    # Build explainer initialised from surrogate backbone.
+    print(f"Building explainer: {cfg.model_name}")
+    explainer = build_vit_explainer(
         model_name=cfg.model_name,
         num_classes=num_classes,
-        pretrained=False,
+        surrogate_ckpt_path=cfg.surrogate_ckpt,
     )
-    ckpt = torch.load(cfg.classifier_ckpt, map_location="cpu", weights_only=True)
-    classifier.load_state_dict(ckpt.get("model_state_dict", ckpt))
 
-    history = train_surrogate(
+    history = train_explainer(
+        explainer=explainer,
         surrogate=surrogate,
-        classifier=classifier,
         train_loader=train_loader,
         val_loader=val_loader,
         epochs=cfg.epochs,
         lr=cfg.lr,
         weight_decay=cfg.weight_decay,
         warmup_steps=cfg.warmup_steps,
+        num_mask_samples=cfg.num_mask_samples,
+        paired=cfg.paired_masks,
         device=device,
-        classifier_device=classifier_device,
+        surrogate_device=surrogate_device,
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
     )
 
     print(
         f"\nTraining complete. "
-        f"Best val KL: {history['best_val_loss']:.4f} at epoch {history['best_epoch']}."
+        f"Best val loss: {history['best_val_loss']:.6f} at epoch {history['best_epoch']}."
     )
 
 

@@ -58,9 +58,10 @@ def sample_subset_masks(
 ) -> torch.Tensor:
     """Sample random binary patch masks for surrogate training.
 
-    For each sample, the cardinality ``m`` is drawn uniformly from
-    ``{0, 1, ..., num_patches}`` and then ``m`` patch indices are selected
-    uniformly at random without replacement.
+    For each sample a random threshold ``t ~ U(0,1)`` is drawn and each patch
+    is independently included when ``rand() > t``.  This produces a uniform
+    distribution over cardinalities ``{0, 1, ..., num_patches}`` with
+    independent Bernoulli within-cardinality sampling.
 
     Args:
         batch_size: Number of masks to generate.
@@ -74,14 +75,13 @@ def sample_subset_masks(
         Float tensor ``(batch_size, num_patches)`` — ``1.0`` = visible,
         ``0.0`` = masked.
     """
-    masks = torch.zeros(batch_size, num_patches, device=device)
-    for i in range(batch_size):
-        m = torch.randint(
-            0, num_patches + 1, (1,), generator=generator, device=device
-        ).item()
-        if m > 0:
-            idx = torch.randperm(num_patches, device=device, generator=generator)[:m]
-            masks[i, idx] = 1.0
+    rand_vals = torch.rand(
+        batch_size, num_patches, device=device, generator=generator,
+    )
+    thresholds = torch.rand(
+        batch_size, 1, device=device, generator=generator,
+    )
+    masks = (rand_vals > thresholds).float()
     return masks
 
 
@@ -93,6 +93,7 @@ def train_one_epoch_surrogate(
     device: torch.device,
     scaler: Optional[torch.amp.GradScaler] = None,
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
+    classifier_device: Optional[torch.device] = None,
 ) -> dict[str, float]:
     """Run one surrogate training epoch.
 
@@ -105,15 +106,19 @@ def train_one_epoch_surrogate(
         classifier: Frozen teacher classifier (frozen outside this function).
         loader: Training DataLoader.
         optimizer: Optimizer for surrogate parameters.
-        device: Target device.
+        device: Target device for the surrogate.
         scaler: :class:`torch.cuda.amp.GradScaler` for AMP, or ``None``.
         scheduler: Step-level LR scheduler (stepped once per gradient update).
             ``None`` disables LR scheduling within the epoch.
+        classifier_device: Device for the classifier. When ``None``, the
+            classifier is assumed to be on the same device as the surrogate.
 
     Returns:
         Dict with ``"loss"`` (mean KL divergence per sample) and ``"acc"``
         (top-1 accuracy of the surrogate on randomly masked inputs).
     """
+    if classifier_device is None:
+        classifier_device = device
     surrogate.train()
     classifier.eval()
     total_loss = 0.0
@@ -133,8 +138,10 @@ def train_one_epoch_surrogate(
         use_amp = scaler is not None
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             with torch.no_grad():
-                teacher_logits = classifier(images)
-            teacher_probs = teacher_logits.softmax(dim=-1)
+                clf_autocast = classifier_device.type == "cuda"
+                with torch.amp.autocast(device_type=classifier_device.type, enabled=clf_autocast):
+                    teacher_logits = classifier(images.to(classifier_device))
+            teacher_probs = teacher_logits.to(device).softmax(dim=-1)
 
             surrogate_logits = surrogate(images, patch_mask=patch_mask)
             surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)
@@ -173,6 +180,7 @@ def evaluate_surrogate(
     loader: DataLoader,
     device: torch.device,
     val_seed: int = 0,
+    classifier_device: Optional[torch.device] = None,
 ) -> dict[str, float]:
     """Evaluate the surrogate on the validation set.
 
@@ -188,14 +196,18 @@ def evaluate_surrogate(
         surrogate: The :class:`~vit_shapley.models.SurrogateViT` to evaluate.
         classifier: Frozen teacher classifier.
         loader: Validation DataLoader (should have ``shuffle=False``).
-        device: Target device.
+        device: Target device for the surrogate.
         val_seed: Seed for the validation mask generator.  All calls with the
             same seed produce identical masks, giving reproducible val KL.
+        classifier_device: Device for the classifier. When ``None``, the
+            classifier is assumed to be on the same device as the surrogate.
 
     Returns:
         Dict with ``"loss"`` (mean KL divergence) and ``"acc"`` (top-1
         accuracy on full-image surrogate predictions).
     """
+    if classifier_device is None:
+        classifier_device = device
     surrogate.eval()
     classifier.eval()
     total_loss = 0.0
@@ -214,7 +226,7 @@ def evaluate_surrogate(
 
         patch_mask = sample_subset_masks(B, num_patches, device, generator=gen)
 
-        teacher_probs = classifier(images).softmax(dim=-1)
+        teacher_probs = classifier(images.to(classifier_device)).to(device).softmax(dim=-1)
         surrogate_log_probs = surrogate(images, patch_mask=patch_mask).log_softmax(dim=-1)
         loss = F.kl_div(surrogate_log_probs, teacher_probs, reduction="batchmean")
 
@@ -242,6 +254,7 @@ def train_surrogate(
     weight_decay: float = 1e-5,
     warmup_steps: int = 500,
     device: torch.device | str = "cpu",
+    classifier_device: Optional[torch.device | str] = None,
     save_dir: Optional[str | os.PathLike] = None,
     use_amp: bool = True,
 ) -> dict[str, Any]:
@@ -262,7 +275,9 @@ def train_surrogate(
         weight_decay: AdamW weight decay (paper default: 1e-5).
         warmup_steps: Number of gradient steps for linear LR warm-up
             (paper default: 500).
-        device: Target compute device.
+        device: Target compute device for the surrogate.
+        classifier_device: Device for the frozen classifier. When ``None``,
+            the classifier is placed on the same device as the surrogate.
         save_dir: Directory for checkpoints. Skipped if ``None``.
         use_amp: Enable mixed-precision training (CUDA only).
 
@@ -278,8 +293,16 @@ def train_surrogate(
             }
     """
     device = torch.device(device) if isinstance(device, str) else device
+    if classifier_device is None:
+        classifier_device = device
+    else:
+        classifier_device = (
+            torch.device(classifier_device)
+            if isinstance(classifier_device, str)
+            else classifier_device
+        )
     surrogate = surrogate.to(device)
-    classifier = classifier.to(device)
+    classifier = classifier.to(classifier_device)
 
     # Freeze the teacher.
     classifier.eval()
@@ -311,10 +334,12 @@ def train_surrogate(
 
     for epoch in range(1, epochs + 1):
         train_metrics = train_one_epoch_surrogate(
-            surrogate, classifier, train_loader, optimizer, device, scaler, scheduler
+            surrogate, classifier, train_loader, optimizer, device, scaler, scheduler,
+            classifier_device=classifier_device,
         )
         val_metrics = evaluate_surrogate(
-            surrogate, classifier, val_loader, device, val_seed=0
+            surrogate, classifier, val_loader, device, val_seed=0,
+            classifier_device=classifier_device,
         )
 
         history["train_loss"].append(train_metrics["loss"])

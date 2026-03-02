@@ -1,0 +1,17 @@
+# REQUIRED: update to point at your Stage 2 surrogate checkpoint
+surrogate_ckpt: $checkpoint_dir/surrogate/best_surrogate.pth
+data_root: $data_dir
+model_name: vit_base_patch16_224
+epochs: 100
+batch_size: 64
+lr: 1.0e-4
+weight_decay: 1.0e-5
+warmup_steps: 500
+num_mask_samples: 32
+paired_masks: true
+num_workers: 4
+image_size: 224
+save_dir: $checkpoint_dir/explainer
+use_amp: true
+device: ""
+surrogate_device: ""
