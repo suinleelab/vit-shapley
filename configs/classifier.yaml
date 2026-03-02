@@ -10,4 +10,4 @@ num_workers: 4
 image_size: 224
 save_dir: $checkpoint_dir/classifier
 use_amp: true
-device: ""
+device: "cuda:0"

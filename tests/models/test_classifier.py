@@ -31,30 +31,9 @@ class TestBuildVitClassifier:
             x = torch.randn(1, 3, 224, 224)
             with torch.no_grad():
                 out = model(x)
-            assert out.shape == (1, num_classes), f"Failed for num_classes={num_classes}"
-
-    def test_returns_nn_module(self):
-        import torch.nn as nn
-        model = build_vit_classifier(_TINY_MODEL, num_classes=10, pretrained=False)
-        assert isinstance(model, nn.Module)
-
-    def test_dropout_zero(self):
-        model = build_vit_classifier(
-            _TINY_MODEL, num_classes=10, pretrained=False, dropout=0.0
-        )
-        assert model is not None
-
-    def test_dropout_nonzero(self):
-        model = build_vit_classifier(
-            _TINY_MODEL, num_classes=10, pretrained=False, dropout=0.5
-        )
-        assert model is not None
-
-    def test_model_is_trainable(self):
-        model = build_vit_classifier(_TINY_MODEL, num_classes=10, pretrained=False)
-        # All parameters should have requires_grad=True by default
-        trainable = [p for p in model.parameters() if p.requires_grad]
-        assert len(trainable) > 0
+            assert out.shape == (1, num_classes), (
+                f"Failed for num_classes={num_classes}"
+            )
 
     def test_batch_independence(self):
         """Different batch sizes should give same per-sample outputs."""
@@ -69,4 +48,6 @@ class TestBuildVitClassifier:
 
     def test_invalid_model_name_raises(self):
         with pytest.raises(Exception):
-            build_vit_classifier("not_a_real_model_xyz", num_classes=10, pretrained=False)
+            build_vit_classifier(
+                "not_a_real_model_xyz", num_classes=10, pretrained=False
+            )

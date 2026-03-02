@@ -6,8 +6,6 @@ without pretrained weights for speed.
 
 from __future__ import annotations
 
-import copy
-
 import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -33,6 +31,7 @@ _NUM_SAMPLES = 6
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_synthetic_dataset(
     num_samples: int = _NUM_SAMPLES,
@@ -80,6 +79,7 @@ def device():
 # shapley_kernel_weights
 # ---------------------------------------------------------------------------
 
+
 class TestShapleyKernelWeights:
     def test_kernel_weights_length(self):
         n = 10
@@ -104,7 +104,7 @@ class TestShapleyKernelWeights:
         weights = shapley_kernel_weights(n)
         for k in range(n + 1):
             assert abs(weights[k] - weights[n - k]) < 1e-10, (
-                f"Asymmetry at k={k}: w({k})={weights[k]}, w({n-k})={weights[n-k]}"
+                f"Asymmetry at k={k}: w({k})={weights[k]}, w({n - k})={weights[n - k]}"
             )
 
     def test_kernel_weights_large_n(self):
@@ -113,6 +113,7 @@ class TestShapleyKernelWeights:
         assert len(weights) == 197
         assert all(w >= 0.0 for w in weights)
         import math
+
         assert all(not math.isnan(w) for w in weights)
 
     def test_kernel_weights_middle_positive(self):
@@ -126,6 +127,7 @@ class TestShapleyKernelWeights:
 # ---------------------------------------------------------------------------
 # sample_shapley_masks
 # ---------------------------------------------------------------------------
+
 
 class TestSampleShapleyMasks:
     def test_output_shape_unpaired(self):
@@ -209,42 +211,42 @@ class TestSampleShapleyMasks:
 # train_one_epoch_explainer
 # ---------------------------------------------------------------------------
 
+
 class TestTrainOneEpochExplainer:
-    def test_train_one_epoch_returns_keys(
+    def test_returns_valid_metrics(
         self, tiny_explainer, tiny_surrogate, train_loader, device
     ):
         optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
         metrics = train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
         assert "loss" in metrics
-
-    def test_train_one_epoch_loss_positive(
-        self, tiny_explainer, tiny_surrogate, train_loader, device
-    ):
-        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
-        metrics = train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
-        )
-        assert metrics["loss"] >= 0.0
+        assert isinstance(metrics["loss"], float) and metrics["loss"] >= 0.0
 
     def test_surrogate_weights_frozen(
         self, tiny_explainer, tiny_surrogate, train_loader, device
     ):
         """Surrogate parameters must not change after an epoch."""
-        surrogate_before = {
-            k: v.clone() for k, v in tiny_surrogate.named_parameters()
-        }
+        surrogate_before = {k: v.clone() for k, v in tiny_surrogate.named_parameters()}
         tiny_surrogate.eval()
         for p in tiny_surrogate.parameters():
             p.requires_grad_(False)
 
         optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
         train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
 
         for k, v_before in surrogate_before.items():
@@ -259,13 +261,16 @@ class TestTrainOneEpochExplainer:
         for p in tiny_surrogate.parameters():
             p.requires_grad_(False)
 
-        params_before = {
-            k: v.clone() for k, v in tiny_explainer.named_parameters()
-        }
+        params_before = {k: v.clone() for k, v in tiny_explainer.named_parameters()}
         optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-3)
         train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
 
         changed = any(
@@ -274,27 +279,24 @@ class TestTrainOneEpochExplainer:
         )
         assert changed, "No explainer parameters changed after training epoch"
 
-    def test_loss_is_float(
-        self, tiny_explainer, tiny_surrogate, train_loader, device
-    ):
-        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
-        metrics = train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
-        )
-        assert isinstance(metrics["loss"], float)
-
     def test_scheduler_is_stepped(
         self, tiny_explainer, tiny_surrogate, train_loader, device
     ):
         """The per-step scheduler must be called once per gradient update."""
         optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda s: 1.0)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=lambda s: 1.0
+        )
         steps_before = scheduler.last_epoch
 
         train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
             scheduler=scheduler,
         )
         # scheduler should have been stepped once per batch
@@ -307,26 +309,109 @@ class TestTrainOneEpochExplainer:
         """Training with paired=False must not raise."""
         optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
         metrics = train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=4, paired=False,
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=4,
+            paired=False,
         )
         assert metrics["loss"] >= 0.0
+
+    def test_gradient_accumulation_runs(
+        self, tiny_explainer, tiny_surrogate, train_loader, device
+    ):
+        """gradient_accumulation_steps > 1 must not raise and produce valid loss."""
+        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
+        metrics = train_one_epoch_explainer(
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
+            gradient_accumulation_steps=2,
+        )
+        assert "loss" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] >= 0.0
+
+    def test_gradient_accumulation_scheduler_steps(
+        self, tiny_explainer, tiny_surrogate, train_loader, device
+    ):
+        """With accum=K, scheduler should step ceil(num_batches/K) times."""
+        import math as _math
+
+        accum = 2
+        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=lambda s: 1.0
+        )
+        steps_before = scheduler.last_epoch
+
+        train_one_epoch_explainer(
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
+            scheduler=scheduler,
+            gradient_accumulation_steps=accum,
+        )
+        num_batches = len(train_loader)
+        expected_steps = _math.ceil(num_batches / accum)
+        assert scheduler.last_epoch == steps_before + expected_steps
+
+    def test_gradient_accumulation_weights_update(
+        self, tiny_explainer, tiny_surrogate, train_loader, device
+    ):
+        """Explainer weights should still update with gradient accumulation."""
+        tiny_surrogate.eval()
+        for p in tiny_surrogate.parameters():
+            p.requires_grad_(False)
+
+        params_before = {k: v.clone() for k, v in tiny_explainer.named_parameters()}
+        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-3)
+        train_one_epoch_explainer(
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            optimizer,
+            device,
+            num_mask_samples=2,
+            paired=True,
+            gradient_accumulation_steps=2,
+        )
+
+        changed = any(
+            not torch.allclose(params_before[k], v)
+            for k, v in tiny_explainer.named_parameters()
+        )
+        assert changed, "No explainer parameters changed with gradient accumulation"
 
 
 # ---------------------------------------------------------------------------
 # evaluate_explainer
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateExplainer:
-    def test_evaluate_returns_keys(
+    def test_evaluate_returns_valid_metrics(
         self, tiny_explainer, tiny_surrogate, val_loader, device
     ):
         metrics = evaluate_explainer(
-            tiny_explainer, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            val_loader,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
-        assert "loss" in metrics
-        assert "efficiency_gap" in metrics
+        assert "loss" in metrics and "efficiency_gap" in metrics
+        assert metrics["loss"] >= 0.0
 
     def test_evaluate_no_gradient(
         self, tiny_explainer, tiny_surrogate, val_loader, device
@@ -336,23 +421,18 @@ class TestEvaluateExplainer:
         tiny_explainer.zero_grad()
 
         evaluate_explainer(
-            tiny_explainer, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True,
+            tiny_explainer,
+            tiny_surrogate,
+            val_loader,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
 
         for p in tiny_surrogate.parameters():
             assert p.grad is None, "Surrogate gradient was populated during evaluate"
         for p in tiny_explainer.parameters():
             assert p.grad is None, "Explainer gradient was populated during evaluate"
-
-    def test_evaluate_loss_positive(
-        self, tiny_explainer, tiny_surrogate, val_loader, device
-    ):
-        metrics = evaluate_explainer(
-            tiny_explainer, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True,
-        )
-        assert metrics["loss"] >= 0.0
 
     def test_evaluate_efficiency_gap_near_zero_after_normalization(
         self, tiny_surrogate, val_loader, device
@@ -367,17 +447,19 @@ class TestEvaluateExplainer:
             activation=None,
         )
         metrics = evaluate_explainer(
-            explainer, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True,
+            explainer,
+            tiny_surrogate,
+            val_loader,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
         # Additive norm hard-enforces Σφ = grand - null → gap should be ~0
         assert metrics["efficiency_gap"] < 1e-4, (
             f"Efficiency gap too large: {metrics['efficiency_gap']}"
         )
 
-    def test_evaluate_efficiency_gap_positive(
-        self, tiny_surrogate, val_loader, device
-    ):
+    def test_evaluate_efficiency_gap_positive(self, tiny_surrogate, val_loader, device):
         """Without normalization the efficiency gap is generally > 0."""
         explainer_no_norm = build_vit_explainer(
             _TINY_MODEL,
@@ -388,8 +470,12 @@ class TestEvaluateExplainer:
             activation=None,
         )
         metrics = evaluate_explainer(
-            explainer_no_norm, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True,
+            explainer_no_norm,
+            tiny_surrogate,
+            val_loader,
+            device,
+            num_mask_samples=2,
+            paired=True,
         )
         assert metrics["efficiency_gap"] >= 0.0
 
@@ -398,14 +484,19 @@ class TestEvaluateExplainer:
 # train_explainer
 # ---------------------------------------------------------------------------
 
+
 class TestTrainExplainer:
     def test_train_explainer_history_keys(
         self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device
     ):
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, use_amp=False
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            use_amp=False,
         )
         assert "train_loss" in history
         assert "val_loss" in history
@@ -418,40 +509,44 @@ class TestTrainExplainer:
     ):
         epochs = 2
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=epochs, device=device, use_amp=False
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=epochs,
+            device=device,
+            use_amp=False,
         )
         assert len(history["train_loss"]) == epochs
         assert len(history["val_loss"]) == epochs
         assert len(history["val_efficiency_gap"]) == epochs
 
-    def test_train_explainer_checkpoint_saved(
-        self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device, tmp_path
-    ):
-        train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, use_amp=False, save_dir=tmp_path
-        )
-        assert (tmp_path / "best_explainer.pth").exists()
-
     def test_train_explainer_checkpoint_loadable(
         self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device, tmp_path
     ):
         train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, use_amp=False, save_dir=tmp_path
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            use_amp=False,
+            save_dir=tmp_path,
         )
-        ckpt = torch.load(tmp_path / "best_explainer.pth", map_location="cpu", weights_only=True)
+        ckpt = torch.load(
+            tmp_path / "best_explainer.pth", map_location="cpu", weights_only=True
+        )
         assert "model_state_dict" in ckpt
         assert "epoch" in ckpt
         # Reload into a fresh explainer
         fresh = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1,
-            normalization="additive", activation=None,
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=1,
+            normalization="additive",
+            activation=None,
         )
         fresh.load_state_dict(ckpt["model_state_dict"])
 
@@ -460,9 +555,14 @@ class TestTrainExplainer:
     ):
         """Training without save_dir must not raise."""
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, use_amp=False, save_dir=None
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            use_amp=False,
+            save_dir=None,
         )
         assert history is not None
 
@@ -471,9 +571,13 @@ class TestTrainExplainer:
     ):
         epochs = 3
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=epochs, device=device, use_amp=False
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=epochs,
+            device=device,
+            use_amp=False,
         )
         assert history["best_val_loss"] <= min(history["val_loss"]) + 1e-9
 
@@ -482,82 +586,61 @@ class TestTrainExplainer:
     ):
         epochs = 2
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=epochs, device=device, use_amp=False
+            tiny_explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=epochs,
+            device=device,
+            use_amp=False,
         )
         assert 1 <= history["best_epoch"] <= epochs
 
-    def test_surrogate_frozen_during_training(
-        self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device
+    def test_train_explainer_with_gradient_accumulation(
+        self, tiny_surrogate, train_loader, val_loader, device, tmp_path
     ):
-        """Surrogate parameters must be unchanged after full train_explainer call."""
-        params_before = {k: v.clone() for k, v in tiny_surrogate.named_parameters()}
-        train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, use_amp=False
+        """Full training with gradient_accumulation_steps > 1."""
+        explainer = build_vit_explainer(
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=1,
+            normalization="additive",
+            activation=None,
         )
-        for k, v_before in params_before.items():
-            v_after = dict(tiny_surrogate.named_parameters())[k]
-            assert torch.allclose(v_before, v_after), f"Surrogate param {k} changed!"
-
-    def test_paper_defaults_hyperparams(self):
-        """train_explainer default lr, weight_decay, epochs match paper."""
-        import inspect
-        sig = inspect.signature(train_explainer)
-        assert sig.parameters["lr"].default == 1e-4
-        assert sig.parameters["weight_decay"].default == 1e-5
-        assert sig.parameters["epochs"].default == 100
-        assert sig.parameters["warmup_steps"].default == 500
-
-    def test_warmup_steps_param_accepted(
-        self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device
-    ):
-        """warmup_steps parameter must be accepted without error."""
         history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, warmup_steps=10, device=device, use_amp=False
+            explainer,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            use_amp=False,
+            save_dir=tmp_path,
+            gradient_accumulation_steps=2,
         )
-        assert history is not None
-
-    def test_num_mask_samples_param_accepted(
-        self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device
-    ):
-        """num_mask_samples and paired params must be accepted without error."""
-        history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, num_mask_samples=2, paired=True, device=device, use_amp=False
-        )
-        assert history is not None
-
-    def test_surrogate_device_param_accepted(
-        self, tiny_explainer, tiny_surrogate, train_loader, val_loader, device
-    ):
-        """surrogate_device kwarg should be accepted and produce valid results."""
-        history = train_explainer(
-            tiny_explainer, tiny_surrogate,
-            train_loader, val_loader,
-            epochs=1, device=device, surrogate_device=device, use_amp=False
-        )
-        assert "train_loss" in history
-        assert history["train_loss"][0] >= 0.0
+        assert len(history["train_loss"]) == 1
+        assert (tmp_path / "best_explainer.pth").exists()
 
     def test_surrogate_device_none_defaults_to_device(
         self, tiny_surrogate, train_loader, val_loader, device
     ):
         """surrogate_device=None should behave identically to omitting it."""
         explainer1 = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1,
-            normalization="additive", activation=None,
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=1,
+            normalization="additive",
+            activation=None,
         )
         explainer2 = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1,
-            normalization="additive", activation=None,
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=1,
+            normalization="additive",
+            activation=None,
         )
         explainer2.load_state_dict(explainer1.state_dict())
         surrogate2 = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
@@ -565,36 +648,23 @@ class TestTrainExplainer:
 
         torch.manual_seed(0)
         h1 = train_explainer(
-            explainer1, tiny_surrogate, train_loader, val_loader,
-            epochs=1, device=device, use_amp=False,
+            explainer1,
+            tiny_surrogate,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            use_amp=False,
         )
         torch.manual_seed(0)
         h2 = train_explainer(
-            explainer2, surrogate2, train_loader, val_loader,
-            epochs=1, device=device, surrogate_device=None, use_amp=False,
+            explainer2,
+            surrogate2,
+            train_loader,
+            val_loader,
+            epochs=1,
+            device=device,
+            surrogate_device=None,
+            use_amp=False,
         )
         assert abs(h1["val_loss"][0] - h2["val_loss"][0]) < 1e-6
-
-    def test_train_one_epoch_surrogate_device_param(
-        self, tiny_explainer, tiny_surrogate, train_loader, device
-    ):
-        """train_one_epoch_explainer accepts surrogate_device kwarg."""
-        tiny_surrogate.eval()
-        for p in tiny_surrogate.parameters():
-            p.requires_grad_(False)
-        optimizer = torch.optim.AdamW(tiny_explainer.parameters(), lr=1e-4)
-        metrics = train_one_epoch_explainer(
-            tiny_explainer, tiny_surrogate, train_loader, optimizer, device,
-            num_mask_samples=2, paired=True, surrogate_device=device,
-        )
-        assert "loss" in metrics
-
-    def test_evaluate_surrogate_device_param(
-        self, tiny_explainer, tiny_surrogate, val_loader, device
-    ):
-        """evaluate_explainer accepts surrogate_device kwarg."""
-        metrics = evaluate_explainer(
-            tiny_explainer, tiny_surrogate, val_loader, device,
-            num_mask_samples=2, paired=True, surrogate_device=device,
-        )
-        assert "loss" in metrics

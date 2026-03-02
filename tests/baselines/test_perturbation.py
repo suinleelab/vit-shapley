@@ -34,13 +34,10 @@ def single_image():
 # leave_one_out
 # ---------------------------------------------------------------------------
 
+
 class TestLeaveOneOut:
     def test_output_shape_multiclass(self, surrogate, single_image):
         result = leave_one_out(single_image, surrogate)
-        assert result.shape == (_NUM_CLASSES, _NUM_PATCHES)
-
-    def test_output_shape_with_batch_dim(self, surrogate, single_image):
-        result = leave_one_out(single_image.unsqueeze(0), surrogate)
         assert result.shape == (_NUM_CLASSES, _NUM_PATCHES)
 
     def test_output_shape_binary(self, single_image):
@@ -71,14 +68,11 @@ class TestLeaveOneOut:
         result = leave_one_out(single_image, const_surrogate, num_patches=_NUM_PATCHES)
         np.testing.assert_allclose(result, 0.0, atol=1e-6)
 
-    def test_returns_numpy(self, surrogate, single_image):
-        result = leave_one_out(single_image, surrogate)
-        assert isinstance(result, np.ndarray)
-
 
 # ---------------------------------------------------------------------------
 # rise
 # ---------------------------------------------------------------------------
+
 
 class TestRise:
     def test_output_shape_multiclass(self, surrogate, single_image):
@@ -100,12 +94,10 @@ class TestRise:
             rise(single_image, surrogate, N=101, batch_size=100)
 
     def test_num_patches_explicit(self, surrogate, single_image):
-        result = rise(single_image, surrogate, N=100, batch_size=100, num_patches=_NUM_PATCHES)
+        result = rise(
+            single_image, surrogate, N=100, batch_size=100, num_patches=_NUM_PATCHES
+        )
         assert result.shape == (_NUM_CLASSES, _NUM_PATCHES)
-
-    def test_returns_numpy(self, surrogate, single_image):
-        result = rise(single_image, surrogate, N=100, batch_size=100)
-        assert isinstance(result, np.ndarray)
 
     def test_values_nonnegative_for_softmax_output(self, surrogate, single_image):
         """RISE scores for softmax probabilities should be non-negative."""

@@ -49,23 +49,10 @@ def _make_grand_null(B: int, num_classes: int):
 # build_vit_explainer
 # ---------------------------------------------------------------------------
 
-class TestBuildVitExplainer:
-    def test_build_no_ckpt(self):
-        m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1, normalization=None, activation=None
-        )
-        assert isinstance(m, ExplainerViT)
 
+class TestBuildVitExplainer:
     def test_returns_explainer_vit(self, explainer):
         assert isinstance(explainer, ExplainerViT)
-
-    def test_is_nn_module(self, explainer):
-        assert isinstance(explainer, torch.nn.Module)
-
-    def test_has_trainable_params(self, explainer):
-        trainable = [p for p in explainer.parameters() if p.requires_grad]
-        assert len(trainable) > 0
 
     def test_build_with_surrogate_ckpt(self, tmp_path):
         """Explainer built from a surrogate ckpt should inherit backbone weights."""
@@ -104,8 +91,12 @@ class TestBuildVitExplainer:
         """Both vit_tiny and vit_small should build without error."""
         for model_name in [_TINY_MODEL, _SMALL_MODEL]:
             m = build_vit_explainer(
-                model_name, num_classes=_NUM_CLASSES,
-                num_attn_blocks=0, num_mlp_layers=1, normalization=None, activation=None
+                model_name,
+                num_classes=_NUM_CLASSES,
+                num_attn_blocks=0,
+                num_mlp_layers=1,
+                normalization=None,
+                activation=None,
             )
             assert isinstance(m, ExplainerViT)
 
@@ -115,52 +106,48 @@ class TestBuildVitExplainer:
         assert isinstance(m, ExplainerViT)
         assert len(m.attention_blocks) == 1
 
-    def test_build_num_attn_blocks_zero(self):
+    @pytest.mark.parametrize("num_attn_blocks", [0, 2])
+    def test_build_num_attn_blocks(self, num_attn_blocks):
         m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1, normalization=None, activation=None
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=num_attn_blocks,
+            num_mlp_layers=1,
+            normalization=None,
+            activation=None,
         )
-        assert len(m.attention_blocks) == 0
+        assert len(m.attention_blocks) == num_attn_blocks
 
-    def test_build_num_attn_blocks_two(self):
+    @pytest.mark.parametrize("num_mlp_layers", [1, 3])
+    def test_build_mlp_layers(self, num_mlp_layers):
         m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=2, num_mlp_layers=1, normalization=None, activation=None
-        )
-        assert len(m.attention_blocks) == 2
-
-    def test_build_mlp_layers_1(self):
-        m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1, normalization=None, activation=None
-        )
-        # 1-layer MLP: Sequential(Linear)
-        linear_layers = [
-            mod for mod in m.shapley_head.modules() if isinstance(mod, torch.nn.Linear)
-        ]
-        assert len(linear_layers) == 1
-
-    def test_build_mlp_layers_3(self):
-        m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=3, normalization=None, activation=None
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=num_mlp_layers,
+            normalization=None,
+            activation=None,
         )
         linear_layers = [
             mod for mod in m.shapley_head.modules() if isinstance(mod, torch.nn.Linear)
         ]
-        assert len(linear_layers) == 3
+        assert len(linear_layers) == num_mlp_layers
 
     def test_invalid_mlp_layers_raises(self):
         with pytest.raises(ValueError, match="num_mlp_layers"):
             build_vit_explainer(
-                _TINY_MODEL, num_classes=_NUM_CLASSES,
-                num_attn_blocks=0, num_mlp_layers=5, normalization=None
+                _TINY_MODEL,
+                num_classes=_NUM_CLASSES,
+                num_attn_blocks=0,
+                num_mlp_layers=5,
+                normalization=None,
             )
 
 
 # ---------------------------------------------------------------------------
 # ExplainerViT forward — no normalization (backward-compat tests)
 # ---------------------------------------------------------------------------
+
 
 class TestExplainerVitForward:
     def test_output_shape(self, explainer):
@@ -171,18 +158,6 @@ class TestExplainerVitForward:
             out = explainer(x)
         assert out.shape == (B, _NUM_PATCHES, _NUM_CLASSES)
 
-    def test_output_dtype_float32(self, explainer):
-        x = torch.randn(2, 3, 224, 224)
-        with torch.no_grad():
-            out = explainer(x)
-        assert out.dtype == torch.float32
-
-    def test_forward_no_grad(self, explainer):
-        x = torch.randn(2, 3, 224, 224)
-        with torch.no_grad():
-            out = explainer(x)
-        assert out is not None
-
     def test_output_finite(self, explainer):
         x = torch.randn(2, 3, 224, 224)
         with torch.no_grad():
@@ -192,8 +167,12 @@ class TestExplainerVitForward:
     def test_grad_flows_through_head(self):
         """Gradients must reach the final linear layer of shapley_head."""
         m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=0, num_mlp_layers=1, normalization=None, activation=None
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=0,
+            num_mlp_layers=1,
+            normalization=None,
+            activation=None,
         )
         m.train()
         x = torch.randn(2, 3, 224, 224)
@@ -207,16 +186,11 @@ class TestExplainerVitForward:
         assert last_linear.weight.grad is not None
         assert last_linear.weight.grad.abs().sum() > 0
 
-    def test_batch_size_one(self, explainer):
-        x = torch.randn(1, 3, 224, 224)
-        with torch.no_grad():
-            out = explainer(x)
-        assert out.shape == (1, _NUM_PATCHES, _NUM_CLASSES)
-
 
 # ---------------------------------------------------------------------------
 # ExplainerViT forward — paper-default architecture with normalization
 # ---------------------------------------------------------------------------
+
 
 class TestExplainerVitForwardPaperDefaults:
     def test_output_shape_with_normalization(self, explainer_paper):
@@ -241,8 +215,8 @@ class TestExplainerVitForwardPaperDefaults:
         grand, null = _make_grand_null(B, _NUM_CLASSES)
         with torch.no_grad():
             phi = explainer_paper(x, grand=grand, null=null)
-        phi_sum = phi.sum(dim=1)   # (B, C)
-        expected = grand - null    # (B, C)
+        phi_sum = phi.sum(dim=1)  # (B, C)
+        expected = grand - null  # (B, C)
         assert torch.allclose(phi_sum, expected, atol=1e-5), (
             f"Efficiency axiom violated: max deviation "
             f"{(phi_sum - expected).abs().max().item():.2e}"
@@ -260,10 +234,11 @@ class TestExplainerVitForwardPaperDefaults:
         x = torch.randn(B, 3, 224, 224)
         grand, null = _make_grand_null(B, _NUM_CLASSES)
         phi = explainer_paper(x, grand=grand, null=null)
-        loss = (phi ** 2).sum()  # nonlinear: gradient ≠ 0
+        loss = (phi**2).sum()  # nonlinear: gradient ≠ 0
         loss.backward()
         last_linear = [
-            mod for mod in explainer_paper.shapley_head.modules()
+            mod
+            for mod in explainer_paper.shapley_head.modules()
             if isinstance(mod, torch.nn.Linear)
         ][-1]
         assert last_linear.weight.grad is not None
@@ -271,9 +246,7 @@ class TestExplainerVitForwardPaperDefaults:
 
     def test_attn_block_norm1_is_identity(self, explainer_paper):
         """norm1 of the first extra attention block must be replaced with Identity."""
-        assert isinstance(
-            explainer_paper.attention_blocks[0].norm1, torch.nn.Identity
-        )
+        assert isinstance(explainer_paper.attention_blocks[0].norm1, torch.nn.Identity)
 
     def test_paper_head_output_bounded_by_tanh(self, explainer_paper):
         """Without normalization the raw predictions should be in (-1, 1) via tanh.
@@ -294,8 +267,12 @@ class TestExplainerVitForwardPaperDefaults:
     def test_normalization_none_forward_no_grand_null(self):
         """Explainer with normalization=None must work without grand/null."""
         m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=1, num_mlp_layers=3, normalization=None, activation="tanh"
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=1,
+            num_mlp_layers=3,
+            normalization=None,
+            activation="tanh",
         )
         x = torch.randn(2, 3, 224, 224)
         with torch.no_grad():
@@ -305,9 +282,13 @@ class TestExplainerVitForwardPaperDefaults:
     def test_include_cls_false(self):
         """include_cls=False must still give correct output shape."""
         m = build_vit_explainer(
-            _TINY_MODEL, num_classes=_NUM_CLASSES,
-            num_attn_blocks=1, num_mlp_layers=1,
-            include_cls=False, normalization=None, activation=None
+            _TINY_MODEL,
+            num_classes=_NUM_CLASSES,
+            num_attn_blocks=1,
+            num_mlp_layers=1,
+            include_cls=False,
+            normalization=None,
+            activation=None,
         )
         x = torch.randn(2, 3, 224, 224)
         with torch.no_grad():

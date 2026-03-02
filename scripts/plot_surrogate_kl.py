@@ -5,10 +5,10 @@ Evaluates four model variants against a frozen classifier across a range of
 masked-patch cardinalities and saves a publication-quality figure showing four
 lines:
 
-  - Blue solid:   attn_mask strategy, fine-tuned surrogate weights
-  - Blue dotted:  attn_mask strategy, original classifier weights (un-finetuned)
-  - Red solid:    zero_input strategy, fine-tuned surrogate weights
-  - Red dotted:   zero_input strategy, original classifier weights (un-finetuned)
+  - Blue dotted:  attn_mask strategy, fine-tuned surrogate weights
+  - Blue solid:   attn_mask strategy, original classifier weights (un-finetuned)
+  - Red dotted:   zero_input strategy, fine-tuned surrogate weights
+  - Red solid:    zero_input strategy, original classifier weights (un-finetuned)
 
 Each line shows mean KL(classifier(full_image) || surrogate(masked_image))
 with a shaded 95% confidence interval, as a function of the number of visible
@@ -28,11 +28,18 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless server — must be before pyplot import
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from matplotlib.lines import Line2D
+from matplotlib.ticker import MultipleLocator
 from torch.utils.data import DataLoader, Subset
+
+# ── Paired-palette colours (RGB / 256) ──────────────────────────────────────
+_COLOR_ATTN = np.array([31, 120, 180]) / 256  # Paired index 1
+_COLOR_ZERO = np.array([227, 26, 28]) / 256  # Paired index 5
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -67,7 +74,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Plot surrogate KL divergence vs. mask cardinality (Figure 2).",
     )
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config file."
+    )
     parser.add_argument(
         "--env",
         type=str,
@@ -114,7 +123,7 @@ def main() -> None:
     classifier.load_state_dict(ckpt.get("model_state_dict", ckpt))
     classifier.to(device).eval()
 
-    # Line 1 (blue solid): attn_mask + fine-tuned surrogate weights
+    # Line 1 (blue dotted): attn_mask + fine-tuned surrogate weights
     print(f"Loading attn_mask surrogate from {cfg.attn_surrogate_ckpt} …")
     surr_attn = build_vit_surrogate(
         model_name=cfg.model_name, num_classes=num_classes, masking_strategy="attn_mask"
@@ -122,7 +131,7 @@ def main() -> None:
     _load_surrogate_ckpt(surr_attn, cfg.attn_surrogate_ckpt)
     surr_attn.to(device).eval()
 
-    # Line 2 (blue dotted): attn_mask + classifier weights (un-finetuned baseline)
+    # Line 2 (blue solid): attn_mask + classifier weights (un-finetuned baseline)
     print(f"Loading attn_mask baseline (classifier weights) …")
     base_attn = build_vit_surrogate(
         model_name=cfg.model_name, num_classes=num_classes, masking_strategy="attn_mask"
@@ -130,18 +139,22 @@ def main() -> None:
     _load_classifier_into_surrogate(base_attn, cfg.classifier_ckpt)
     base_attn.to(device).eval()
 
-    # Line 3 (red solid): zero_input + fine-tuned surrogate weights
+    # Line 3 (red dotted): zero_input + fine-tuned surrogate weights
     print(f"Loading zero_input surrogate from {cfg.zero_surrogate_ckpt} …")
     surr_zero = build_vit_surrogate(
-        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="zero_input"
+        model_name=cfg.model_name,
+        num_classes=num_classes,
+        masking_strategy="zero_input",
     )
     _load_surrogate_ckpt(surr_zero, cfg.zero_surrogate_ckpt)
     surr_zero.to(device).eval()
 
-    # Line 4 (red dotted): zero_input + classifier weights (un-finetuned baseline)
+    # Line 4 (red solid): zero_input + classifier weights (un-finetuned baseline)
     print(f"Loading zero_input baseline (classifier weights) …")
     base_zero = build_vit_surrogate(
-        model_name=cfg.model_name, num_classes=num_classes, masking_strategy="zero_input"
+        model_name=cfg.model_name,
+        num_classes=num_classes,
+        masking_strategy="zero_input",
     )
     _load_classifier_into_surrogate(base_zero, cfg.classifier_ckpt)
     base_zero.to(device).eval()
@@ -152,10 +165,10 @@ def main() -> None:
 
     # ----------------------------------------------------------- evaluation --
     series = [
-        (surr_attn, "Attn mask – surrogate",   "steelblue", "-"),
-        (base_attn, "Attn mask – classifier",  "steelblue", "--"),
-        (surr_zero, "Zero input – surrogate",  "firebrick",  "-"),
-        (base_zero, "Zero input – classifier", "firebrick",  "--"),
+        (surr_attn, "Attn mask – surrogate", _COLOR_ATTN, "--"),
+        (base_attn, "Attn mask – classifier", _COLOR_ATTN, "-"),
+        (surr_zero, "Zero input – surrogate", _COLOR_ZERO, "--"),
+        (base_zero, "Zero input – classifier", _COLOR_ZERO, "-"),
     ]
 
     print(
@@ -163,7 +176,16 @@ def main() -> None:
         f"(step={cfg.step}, masks_per_cardinality={cfg.num_masks}) …"
     )
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    # ── rcParams (reference style) ─────────────────────────────────────────
+    plt.rcParams["font.family"] = "PT Sans"
+    plt.rcParams["font.size"] = 18
+    plt.rcParams["legend.fancybox"] = False
+    plt.rcParams["legend.edgecolor"] = "1.0"
+    plt.rcParams["legend.framealpha"] = 0
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    legend_elements = []
 
     for model, label, color, ls in series:
         print(f"  Evaluating: {label} …")
@@ -177,37 +199,62 @@ def main() -> None:
             device=device,
         )
         cardinalities = sorted(results.keys())
+        num_deleted = np.array([num_patches - c for c in cardinalities])
         means = np.array([np.mean(results[m]) for m in cardinalities])
         stds = np.array([np.std(results[m], ddof=1) for m in cardinalities])
         ns = np.array([len(results[m]) for m in cardinalities])
         ci95 = 1.96 * stds / np.sqrt(ns)
 
-        ax.plot(cardinalities, means, color=color, linestyle=ls, linewidth=2, label=label)
+        ax.plot(num_deleted, means, color=color, linestyle=ls, linewidth=3)
         ax.fill_between(
-            cardinalities,
+            num_deleted,
             means - ci95,
             means + ci95,
             alpha=0.2,
             color=color,
         )
+        legend_elements.append(
+            Line2D([0], [0], color=color, linewidth=5, linestyle=ls, label=label)
+        )
 
     # ----------------------------------------------------------------- plot --
-    ax.set_xlabel("Number of visible patches", fontsize=13)
-    ax.set_ylabel("KL divergence", fontsize=13)
-    ax.set_title(
-        f"KL Divergence vs. Mask Cardinality\n"
-        f"({cfg.model_name}, {images.shape[0]} images, {cfg.num_masks} masks)",
-        fontsize=12,
-    )
-    ax.legend(fontsize=11)
-    ax.grid(True, alpha=0.3)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    for axis in ["top", "bottom", "left", "right"]:
+        ax.spines[axis].set_linewidth(2)
+
+    ax.xaxis.set_major_locator(MultipleLocator(28))
+    ax.xaxis.set_minor_locator(MultipleLocator(14))
+    ax.xaxis.grid(True, which="major", linewidth=0.4, alpha=0.6)
+    ax.xaxis.grid(True, which="minor", linewidth=0.4, alpha=0.2)
+
+    ax.yaxis.set_minor_locator(MultipleLocator(0.25))
+    ax.yaxis.grid(True, which="major", linewidth=0.4, alpha=0.6)
+    ax.yaxis.grid(True, which="minor", linewidth=0.4, alpha=0.2)
+
+    ax.set_xlabel("# of Deleted Patches", labelpad=10)
+    ax.set_ylabel("KL divergence")
+    ax.set_title("ImageNette", pad=10)
+    ax.set_xlim(-2, num_patches + 2)
+
+    fig.legend(
+        handles=legend_elements,
+        ncol=4,
+        handletextpad=0.6,
+        columnspacing=1,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.08),
+    ).set_zorder(100)
+
     fig.tight_layout()
+    fig.subplots_adjust(bottom=0.22)
 
     output_path = Path(cfg.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150)
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"Figure saved to {output_path}")
 
 
 if __name__ == "__main__":
+    main()
     main()

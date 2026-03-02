@@ -44,10 +44,9 @@ pip install -e ".[dev]"
 python scripts/train_classifier.py --config configs/classifier.yaml
 
 # Stage 2: Train surrogates (one per masking strategy)
-python scripts/train_surrogate.py --config configs/surrogate.yaml \
-    --set masking_strategy=attn_mask save_dir=checkpoints/surrogate_attn
-python scripts/train_surrogate.py --config configs/surrogate.yaml \
-    --set masking_strategy=zero_input save_dir=checkpoints/surrogate_zero
+# The surrogate model supports two masking strategies: `attn_mask` (attention masking, default) and `zero_input` (zero out masked patch embeddings). Set `masking_strategy` in the surrogate, explainer, and visualize configs to control which strategy is used:
+python scripts/train_surrogate.py --config configs/surrogate_attn.yaml
+python scripts/train_surrogate.py --config configs/surrogate_zero.yaml
 
 # Stage 3: Train explainer
 python scripts/train_explainer.py --config configs/explainer.yaml
@@ -59,19 +58,20 @@ python scripts/plot_surrogate_kl.py --config configs/plot_surrogate_kl.yaml
 python scripts/visualize_explainer.py --config configs/visualize_explainer.yaml
 ```
 
-### Variable Resolution
+Config YAML files use `$data_dir` and `$checkpoint_dir` variables (shell-style syntax). These are resolved automatically from a `.env` file in the project root.
 
-Config YAML files use `$data_dir` and `$checkpoint_dir` variables (shell-style syntax). These are resolved automatically from a `.env` file in the project root:
+### Masking strategy
+
+The surrogate model supports two masking strategies: `attn_mask` (attention masking, default) and `zero_input` (zero out masked patch embeddings). Set `masking_strategy` in the surrogate, explainer, and visualize configs to control which strategy is used:
 
 ```bash
-# .env
-data_dir=/sdata/chanwkim/vit-shapley-data
-checkpoint_dir=checkpoints
+# Train surrogate with zero-input masking
+python scripts/train_surrogate.py --config configs/surrogate_zero.yaml
+
+# Train explainer with matching strategy
+python scripts/train_explainer.py --config configs/explainer.yaml \
+    --set masking_strategy=zero_input surrogate_ckpt=checkpoints/surrogate_zero/best_surrogate.pth
 ```
-
-Scripts load `.env` by default — no extra flags needed. You can also point to a different file with `--env path/to/other.env`, or use shell environment variables instead (`.env` values take priority over shell env vars).
-
-Override any config value with `--set KEY=VALUE` (e.g. `--set epochs=10 lr=1e-4`). `--set` overrides apply last and take final precedence.
 
 ## Testing
 

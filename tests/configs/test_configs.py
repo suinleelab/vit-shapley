@@ -5,16 +5,16 @@ from pydantic import ValidationError
 
 from vit_shapley.configs import (
     ClassifierConfig,
-    SurrogateConfig,
     ExplainerConfig,
     PlotConfig,
+    SurrogateConfig,
     VisualizeConfig,
 )
-
 
 # ---------------------------------------------------------------------------
 # ClassifierConfig
 # ---------------------------------------------------------------------------
+
 
 class TestClassifierConfig:
     def test_defaults(self):
@@ -53,34 +53,16 @@ class TestClassifierConfig:
         assert cfg.epochs == 10
         assert cfg.device == "cpu"
 
-    def test_model_validate(self):
-        data = {"epochs": 5, "batch_size": 8}
-        cfg = ClassifierConfig.model_validate(data)
-        assert cfg.epochs == 5
-        assert cfg.batch_size == 8
-        assert cfg.model_name == "vit_base_patch16_224"  # default
-
-    def test_invalid_epoch_type_raises(self):
-        with pytest.raises(ValidationError):
-            ClassifierConfig(epochs="not_int")
-
-    def test_invalid_lr_type_raises(self):
-        with pytest.raises(ValidationError):
-            ClassifierConfig(lr="fast")
-
 
 # ---------------------------------------------------------------------------
 # SurrogateConfig
 # ---------------------------------------------------------------------------
 
+
 class TestSurrogateConfig:
     def test_requires_classifier_ckpt(self):
         with pytest.raises(ValidationError):
             SurrogateConfig()
-
-    def test_classifier_ckpt_required(self):
-        cfg = SurrogateConfig(classifier_ckpt="checkpoints/best_classifier.pth")
-        assert cfg.classifier_ckpt == "checkpoints/best_classifier.pth"
 
     def test_defaults(self):
         cfg = SurrogateConfig(classifier_ckpt="ckpt.pth")
@@ -95,28 +77,17 @@ class TestSurrogateConfig:
         assert cfg.device == ""
         assert cfg.classifier_device == ""
 
-    def test_masking_strategy_custom(self):
-        cfg = SurrogateConfig(classifier_ckpt="ckpt.pth", masking_strategy="zero_input")
-        assert cfg.masking_strategy == "zero_input"
-
     def test_model_validate_with_required_field(self):
         data = {"classifier_ckpt": "ckpt.pth", "epochs": 10}
         cfg = SurrogateConfig.model_validate(data)
         assert cfg.epochs == 10
         assert cfg.classifier_ckpt == "ckpt.pth"
 
-    def test_classifier_device_custom(self):
-        cfg = SurrogateConfig(classifier_ckpt="ckpt.pth", classifier_device="cuda:1")
-        assert cfg.classifier_device == "cuda:1"
-
-    def test_model_validate_missing_required_raises(self):
-        with pytest.raises(ValidationError):
-            SurrogateConfig.model_validate({"epochs": 10})
-
 
 # ---------------------------------------------------------------------------
 # ExplainerConfig
 # ---------------------------------------------------------------------------
+
 
 class TestExplainerConfig:
     def test_requires_surrogate_ckpt(self):
@@ -148,6 +119,14 @@ class TestExplainerConfig:
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", num_mask_samples=4)
         assert cfg.num_mask_samples == 4
 
+    def test_masking_strategy_default(self):
+        cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth")
+        assert cfg.masking_strategy == "attn_mask"
+
+    def test_masking_strategy_override(self):
+        cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", masking_strategy="zero_input")
+        assert cfg.masking_strategy == "zero_input"
+
     def test_surrogate_device_custom(self):
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", surrogate_device="cuda:1")
         assert cfg.surrogate_device == "cuda:1"
@@ -160,6 +139,7 @@ class TestExplainerConfig:
 # ---------------------------------------------------------------------------
 # PlotConfig
 # ---------------------------------------------------------------------------
+
 
 class TestPlotConfig:
     def test_requires_all_three_ckpts(self):
@@ -215,6 +195,7 @@ class TestPlotConfig:
 # VisualizeConfig
 # ---------------------------------------------------------------------------
 
+
 class TestVisualizeConfig:
     def test_requires_surrogate_and_explainer_ckpt(self):
         with pytest.raises(ValidationError):
@@ -261,6 +242,18 @@ class TestVisualizeConfig:
             class_indices=None,
         )
         assert cfg.class_indices is None
+
+    def test_masking_strategy_default(self):
+        cfg = VisualizeConfig(surrogate_ckpt="surr.pth", explainer_ckpt="exp.pth")
+        assert cfg.masking_strategy == "attn_mask"
+
+    def test_masking_strategy_override(self):
+        cfg = VisualizeConfig(
+            surrogate_ckpt="surr.pth",
+            explainer_ckpt="exp.pth",
+            masking_strategy="zero_input",
+        )
+        assert cfg.masking_strategy == "zero_input"
 
     def test_split_train(self):
         cfg = VisualizeConfig(

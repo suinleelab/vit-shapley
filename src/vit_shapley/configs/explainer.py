@@ -15,8 +15,10 @@ class ExplainerConfig(BaseModel):
     warmup_steps: int = 500
     num_mask_samples: int = 32
     paired_masks: bool = True
+    gradient_accumulation_steps: int = 1
     num_workers: int = 4
     image_size: int = 224
+    masking_strategy: str = "attn_mask"
     save_dir: str = "checkpoints/explainer"
     use_amp: bool = True
     device: str = ""

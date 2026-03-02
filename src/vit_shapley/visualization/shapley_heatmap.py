@@ -23,7 +23,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-
 # ImageNet normalisation constants (matching training transforms)
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406])[:, None, None]  # CHW
 _IMAGENET_STD = np.array([0.229, 0.224, 0.225])[:, None, None]
@@ -32,6 +31,7 @@ _IMAGENET_STD = np.array([0.229, 0.224, 0.225])[:, None, None]
 # ---------------------------------------------------------------------------
 # 1. Inference
 # ---------------------------------------------------------------------------
+
 
 @torch.no_grad()
 def compute_shapley_values(
@@ -77,6 +77,7 @@ def compute_shapley_values(
 # ---------------------------------------------------------------------------
 # 2. Rendering helpers
 # ---------------------------------------------------------------------------
+
 
 def denormalize_imagenet(img_chw: np.ndarray) -> np.ndarray:
     """Undo ImageNet channel normalisation.
@@ -168,6 +169,7 @@ def _grey_rgba(img_hwc: np.ndarray, alpha: float = 0.5) -> np.ndarray:
 # 3. Figure assembly
 # ---------------------------------------------------------------------------
 
+
 def plot_shapley_heatmaps(
     images_list: Sequence[np.ndarray],
     labels_list: Sequence[int],
@@ -213,17 +215,18 @@ def plot_shapley_heatmaps(
         A :class:`matplotlib.figure.Figure` — call ``.savefig()`` or
         ``plt.show()`` on the returned object.
     """
-    import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
+    import matplotlib.pyplot as plt
 
     if cmap is None:
         import seaborn as sns
+
         cmap = sns.color_palette("icefire", as_cmap=True)
 
     N = len(images_list)
     n_heat = len(class_cols)
     num_patches = phi.shape[1]
-    grid_size = int(num_patches ** 0.5)
+    grid_size = int(num_patches**0.5)
 
     # Column layout: [image] [narrow gap] [heatmap × n_heat]
     col_widths = [1.0, 0.15] + [1.0] * n_heat
@@ -268,9 +271,7 @@ def plot_shapley_heatmaps(
             ax_h.imshow(heat_rgba)
 
             prob_str = (
-                f"{grand_probs[row, cls_idx]:.2f}"
-                if grand_probs is not None
-                else None
+                f"{grand_probs[row, cls_idx]:.2f}" if grand_probs is not None else None
             )
             if row == 0:
                 title = class_names[cls_idx]

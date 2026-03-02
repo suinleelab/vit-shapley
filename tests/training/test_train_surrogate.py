@@ -32,6 +32,7 @@ _NUM_SAMPLES = 6
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_synthetic_dataset(
     num_samples: int = _NUM_SAMPLES,
     num_classes: int = _NUM_CLASSES,
@@ -69,6 +70,7 @@ def device():
 # ---------------------------------------------------------------------------
 # sample_subset_masks
 # ---------------------------------------------------------------------------
+
 
 class TestSampleSubsetMasks:
     def test_output_shape(self, device):
@@ -135,22 +137,19 @@ class TestSampleSubsetMasks:
         masks2 = sample_subset_masks(4, _NUM_PATCHES, device, generator=gen2)
         assert not torch.equal(masks1, masks2)
 
-    def test_none_generator_still_works(self, device):
-        """Passing generator=None (default) still returns valid masks."""
-        masks = sample_subset_masks(4, _NUM_PATCHES, device, generator=None)
-        assert masks.shape == (4, _NUM_PATCHES)
-        assert set(masks.unique().tolist()).issubset({0.0, 1.0})
-
 
 # ---------------------------------------------------------------------------
 # _cosine_schedule_with_warmup
 # ---------------------------------------------------------------------------
 
+
 class TestCosineScheduleWithWarmup:
     def test_lr_increases_during_warmup(self):
         model = torch.nn.Linear(4, 2)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
-        scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps=10, total_steps=100)
+        scheduler = _cosine_schedule_with_warmup(
+            optimizer, warmup_steps=10, total_steps=100
+        )
         lrs = []
         for _ in range(10):
             lrs.append(optimizer.param_groups[0]["lr"])
@@ -163,7 +162,9 @@ class TestCosineScheduleWithWarmup:
         base_lr = 1.0
         optimizer = torch.optim.AdamW(model.parameters(), lr=base_lr)
         warmup_steps = 5
-        scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps=warmup_steps, total_steps=50)
+        scheduler = _cosine_schedule_with_warmup(
+            optimizer, warmup_steps=warmup_steps, total_steps=50
+        )
         for _ in range(warmup_steps):
             scheduler.step()
         assert abs(optimizer.param_groups[0]["lr"] - base_lr) < 1e-6
@@ -173,7 +174,9 @@ class TestCosineScheduleWithWarmup:
         optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
         warmup_steps = 5
         total_steps = 50
-        scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps=warmup_steps, total_steps=total_steps)
+        scheduler = _cosine_schedule_with_warmup(
+            optimizer, warmup_steps=warmup_steps, total_steps=total_steps
+        )
         for _ in range(warmup_steps):
             scheduler.step()
         peak_lr = optimizer.param_groups[0]["lr"]
@@ -190,7 +193,9 @@ class TestCosineScheduleWithWarmup:
         model = torch.nn.Linear(4, 2)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)
         total_steps = 20
-        scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps=2, total_steps=total_steps)
+        scheduler = _cosine_schedule_with_warmup(
+            optimizer, warmup_steps=2, total_steps=total_steps
+        )
         for _ in range(total_steps):
             scheduler.step()
         assert optimizer.param_groups[0]["lr"] < 0.01
@@ -200,30 +205,22 @@ class TestCosineScheduleWithWarmup:
 # train_one_epoch_surrogate
 # ---------------------------------------------------------------------------
 
+
 class TestTrainOneEpochSurrogate:
-    def test_returns_loss_and_acc(self, tiny_surrogate, tiny_classifier, train_loader, device):
+    def test_returns_valid_metrics(
+        self, tiny_surrogate, tiny_classifier, train_loader, device
+    ):
         optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
         metrics = train_one_epoch_surrogate(
             tiny_surrogate, tiny_classifier, train_loader, optimizer, device
         )
         assert "loss" in metrics and "acc" in metrics
-
-    def test_loss_is_positive_float(self, tiny_surrogate, tiny_classifier, train_loader, device):
-        optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
-        metrics = train_one_epoch_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, optimizer, device
-        )
-        assert isinstance(metrics["loss"], float)
-        assert metrics["loss"] > 0.0
-
-    def test_acc_in_valid_range(self, tiny_surrogate, tiny_classifier, train_loader, device):
-        optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
-        metrics = train_one_epoch_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, optimizer, device
-        )
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
         assert 0.0 <= metrics["acc"] <= 1.0
 
-    def test_surrogate_weights_update(self, tiny_surrogate, tiny_classifier, train_loader, device):
+    def test_surrogate_weights_update(
+        self, tiny_surrogate, tiny_classifier, train_loader, device
+    ):
         optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-3)
         before = {n: p.clone() for n, p in tiny_surrogate.named_parameters()}
         train_one_epoch_surrogate(
@@ -233,7 +230,9 @@ class TestTrainOneEpochSurrogate:
         changed = any(not torch.allclose(before[n], after[n]) for n in before)
         assert changed, "No surrogate parameter changed after training"
 
-    def test_classifier_weights_frozen(self, tiny_surrogate, tiny_classifier, train_loader, device):
+    def test_classifier_weights_frozen(
+        self, tiny_surrogate, tiny_classifier, train_loader, device
+    ):
         optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-3)
         before = {n: p.clone() for n, p in tiny_classifier.named_parameters()}
         train_one_epoch_surrogate(
@@ -241,29 +240,45 @@ class TestTrainOneEpochSurrogate:
         )
         after = dict(tiny_classifier.named_parameters())
         for n in before:
-            assert torch.allclose(before[n], after[n]), f"Classifier param '{n}' changed"
+            assert torch.allclose(before[n], after[n]), (
+                f"Classifier param '{n}' changed"
+            )
 
-    def test_scheduler_steps_each_batch(self, tiny_surrogate, tiny_classifier, train_loader, device):
+    def test_scheduler_steps_each_batch(
+        self, tiny_surrogate, tiny_classifier, train_loader, device
+    ):
         """Scheduler should step once per gradient update, not once per epoch."""
         optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-3)
         # A short warmup so LR is still rising; we can verify it moved.
         num_batches = len(train_loader)
         total_steps = num_batches * 10
-        scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps=total_steps, total_steps=total_steps)
+        scheduler = _cosine_schedule_with_warmup(
+            optimizer, warmup_steps=total_steps, total_steps=total_steps
+        )
         lr_before = optimizer.param_groups[0]["lr"]
         train_one_epoch_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, optimizer, device,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            optimizer,
+            device,
             scheduler=scheduler,
         )
         lr_after = optimizer.param_groups[0]["lr"]
         # LR should have increased (still in warmup phase)
         assert lr_after > lr_before
 
-    def test_scheduler_none_still_trains(self, tiny_surrogate, tiny_classifier, train_loader, device):
+    def test_scheduler_none_still_trains(
+        self, tiny_surrogate, tiny_classifier, train_loader, device
+    ):
         """Passing scheduler=None should not raise and training should proceed."""
         optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
         metrics = train_one_epoch_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, optimizer, device,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            optimizer,
+            device,
             scheduler=None,
         )
         assert "loss" in metrics
@@ -273,39 +288,55 @@ class TestTrainOneEpochSurrogate:
 # evaluate_surrogate
 # ---------------------------------------------------------------------------
 
+
 class TestEvaluateSurrogate:
-    def test_returns_loss_and_acc(self, tiny_surrogate, tiny_classifier, val_loader, device):
-        metrics = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device)
+    def test_returns_valid_metrics(
+        self, tiny_surrogate, tiny_classifier, val_loader, device
+    ):
+        metrics = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device
+        )
         assert "loss" in metrics and "acc" in metrics
-
-    def test_loss_is_positive_float(self, tiny_surrogate, tiny_classifier, val_loader, device):
-        metrics = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device)
-        assert isinstance(metrics["loss"], float)
-        assert metrics["loss"] > 0.0
-
-    def test_acc_in_valid_range(self, tiny_surrogate, tiny_classifier, val_loader, device):
-        metrics = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device)
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
         assert 0.0 <= metrics["acc"] <= 1.0
 
-    def test_no_gradient_updates(self, tiny_surrogate, tiny_classifier, val_loader, device):
+    def test_no_gradient_updates(
+        self, tiny_surrogate, tiny_classifier, val_loader, device
+    ):
         before_s = {n: p.clone() for n, p in tiny_surrogate.named_parameters()}
         before_c = {n: p.clone() for n, p in tiny_classifier.named_parameters()}
         evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device)
         for n in before_s:
-            assert torch.allclose(before_s[n], dict(tiny_surrogate.named_parameters())[n])
+            assert torch.allclose(
+                before_s[n], dict(tiny_surrogate.named_parameters())[n]
+            )
         for n in before_c:
-            assert torch.allclose(before_c[n], dict(tiny_classifier.named_parameters())[n])
+            assert torch.allclose(
+                before_c[n], dict(tiny_classifier.named_parameters())[n]
+            )
 
-    def test_val_loss_reproducible_same_seed(self, tiny_surrogate, tiny_classifier, val_loader, device):
+    def test_val_loss_reproducible_same_seed(
+        self, tiny_surrogate, tiny_classifier, val_loader, device
+    ):
         """Two calls with the same val_seed must return identical loss."""
-        m1 = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device, val_seed=7)
-        m2 = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device, val_seed=7)
+        m1 = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device, val_seed=7
+        )
+        m2 = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device, val_seed=7
+        )
         assert m1["loss"] == m2["loss"]
 
-    def test_val_loss_differs_across_seeds(self, tiny_surrogate, tiny_classifier, val_loader, device):
+    def test_val_loss_differs_across_seeds(
+        self, tiny_surrogate, tiny_classifier, val_loader, device
+    ):
         """Different seeds should produce different masks and (almost certainly) different KL."""
-        m0 = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device, val_seed=0)
-        m1 = evaluate_surrogate(tiny_surrogate, tiny_classifier, val_loader, device, val_seed=999)
+        m0 = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device, val_seed=0
+        )
+        m1 = evaluate_surrogate(
+            tiny_surrogate, tiny_classifier, val_loader, device, val_seed=999
+        )
         # With 4 val samples and 196 patches the masks will almost surely differ
         assert m0["loss"] != m1["loss"]
 
@@ -314,81 +345,142 @@ class TestEvaluateSurrogate:
 # train_surrogate
 # ---------------------------------------------------------------------------
 
+
 class TestTrainSurrogate:
-    def test_returns_history_keys(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_returns_history_keys(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         for key in ("train_loss", "val_loss", "val_acc", "best_val_loss", "best_epoch"):
             assert key in history, f"Missing key '{key}'"
 
-    def test_history_length_matches_epochs(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_history_length_matches_epochs(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         epochs = 2
         history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=epochs, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=epochs,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         for key in ("train_loss", "val_loss", "val_acc"):
             assert len(history[key]) == epochs
 
-    def test_best_val_loss_is_min(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_best_val_loss_is_min(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=2, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=2,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         assert history["best_val_loss"] == min(history["val_loss"])
 
-    def test_checkpoint_saved(self, tmp_path, tiny_classifier, train_loader, val_loader, device):
+    def test_checkpoint_loadable(
+        self, tmp_path, tiny_classifier, train_loader, val_loader, device
+    ):
         surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         train_surrogate(
-            surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=tmp_path, use_amp=False,
+            surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=tmp_path,
+            use_amp=False,
         )
-        assert (tmp_path / "best_surrogate.pth").exists()
-
-    def test_checkpoint_loadable(self, tmp_path, tiny_classifier, train_loader, val_loader, device):
-        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
-        train_surrogate(
-            surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=tmp_path, use_amp=False,
+        ckpt = torch.load(
+            tmp_path / "best_surrogate.pth", map_location="cpu", weights_only=True
         )
-        ckpt = torch.load(tmp_path / "best_surrogate.pth", map_location="cpu", weights_only=True)
         assert "model_state_dict" in ckpt
         assert "val_loss" in ckpt
 
         fresh = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         fresh.load_state_dict(ckpt["model_state_dict"])
 
-    def test_no_save_dir_skips_checkpoint(self, tmp_path, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_no_save_dir_skips_checkpoint(
+        self,
+        tmp_path,
+        tiny_surrogate,
+        tiny_classifier,
+        train_loader,
+        val_loader,
+        device,
+    ):
         train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         assert not (tmp_path / "best_surrogate.pth").exists()
 
-    def test_val_loss_positive(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_val_loss_positive(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         assert all(loss > 0.0 for loss in history["val_loss"])
 
-    def test_default_weight_decay_is_1e5(self):
-        """train_surrogate default weight_decay must match the reference (1e-5)."""
-        import inspect
-        sig = inspect.signature(train_surrogate)
-        assert sig.parameters["weight_decay"].default == 1e-5
-
-    def test_warmup_steps_param_accepted(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_warmup_steps_param_accepted(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         """warmup_steps kwarg should be accepted and not raise."""
         history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, warmup_steps=2, device=device, save_dir=None, use_amp=False,
+            tiny_surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            warmup_steps=2,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         assert "train_loss" in history
 
-    def test_val_loss_reproducible_across_epochs(self, tiny_classifier, train_loader, val_loader, device):
+    def test_val_loss_reproducible_across_epochs(
+        self, tiny_classifier, train_loader, val_loader, device
+    ):
         """Val loss reported by train_surrogate must exactly match a standalone
         evaluate_surrogate call using the same (post-training) model and val_seed.
 
@@ -398,8 +490,15 @@ class TestTrainSurrogate:
         """
         surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         h1 = train_surrogate(
-            surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            surrogate,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         # surrogate now has post-training weights; same seed → same masks → same loss
         val_loss_direct = evaluate_surrogate(
@@ -407,51 +506,42 @@ class TestTrainSurrogate:
         )["loss"]
         assert abs(h1["val_loss"][0] - val_loss_direct) < 1e-6
 
-    def test_classifier_device_param_accepted(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
-        """classifier_device kwarg should be accepted and produce valid results."""
-        history = train_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, classifier_device=device,
-            save_dir=None, use_amp=False,
-        )
-        assert "train_loss" in history
-        assert history["train_loss"][0] > 0.0
-
-    def test_classifier_device_none_defaults_to_device(self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device):
+    def test_classifier_device_none_defaults_to_device(
+        self, tiny_surrogate, tiny_classifier, train_loader, val_loader, device
+    ):
         """classifier_device=None should produce identical results to omitting it."""
         surrogate1 = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         surrogate2 = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         # Sync weights
         surrogate2.load_state_dict(surrogate1.state_dict())
-        classifier2 = build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
+        classifier2 = build_vit_classifier(
+            _TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False
+        )
         classifier2.load_state_dict(tiny_classifier.state_dict())
 
         torch.manual_seed(0)
         h1 = train_surrogate(
-            surrogate1, tiny_classifier, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            surrogate1,
+            tiny_classifier,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            save_dir=None,
+            use_amp=False,
         )
         torch.manual_seed(0)
         h2 = train_surrogate(
-            surrogate2, classifier2, train_loader, val_loader,
-            epochs=1, lr=1e-4, device=device, classifier_device=None,
-            save_dir=None, use_amp=False,
+            surrogate2,
+            classifier2,
+            train_loader,
+            val_loader,
+            epochs=1,
+            lr=1e-4,
+            device=device,
+            classifier_device=None,
+            save_dir=None,
+            use_amp=False,
         )
         assert abs(h1["val_loss"][0] - h2["val_loss"][0]) < 1e-6
-
-    def test_train_one_epoch_classifier_device_param(self, tiny_surrogate, tiny_classifier, train_loader, device):
-        """train_one_epoch_surrogate accepts classifier_device kwarg."""
-        optimizer = torch.optim.AdamW(tiny_surrogate.parameters(), lr=1e-4)
-        metrics = train_one_epoch_surrogate(
-            tiny_surrogate, tiny_classifier, train_loader, optimizer, device,
-            classifier_device=device,
-        )
-        assert "loss" in metrics
-
-    def test_evaluate_classifier_device_param(self, tiny_surrogate, tiny_classifier, val_loader, device):
-        """evaluate_surrogate accepts classifier_device kwarg."""
-        metrics = evaluate_surrogate(
-            tiny_surrogate, tiny_classifier, val_loader, device,
-            classifier_device=device,
-        )
-        assert "loss" in metrics

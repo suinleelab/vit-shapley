@@ -14,6 +14,7 @@ class VisualizeConfig(BaseModel):
     split: str = "val"
     sample_indices: list[int] = [0, 1, 2, 3]
     class_indices: Optional[list[int]] = None
+    masking_strategy: str = "attn_mask"
     output: str = "figures/shapley_heatmaps.png"
     image_size: int = 224
     device: str = ""

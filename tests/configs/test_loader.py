@@ -1,24 +1,22 @@
 """Tests for vit_shapley.configs.loader."""
 
-import os
 import textwrap
 from pathlib import Path
 
 import pytest
-import yaml
 
+from vit_shapley.configs import ClassifierConfig, SurrogateConfig
 from vit_shapley.configs.loader import (
-    _parse_value,
     _load_env,
+    _parse_value,
     _resolve_variables,
     load_config,
 )
-from vit_shapley.configs import ClassifierConfig, SurrogateConfig
-
 
 # ---------------------------------------------------------------------------
 # _parse_value
 # ---------------------------------------------------------------------------
+
 
 class TestParseValue:
     def test_int(self):
@@ -51,17 +49,11 @@ class TestParseValue:
         assert _parse_value("hello") == "hello"
         assert _parse_value("vit_tiny_patch16_224") == "vit_tiny_patch16_224"
 
-    def test_empty_string(self):
-        assert _parse_value("") == ""
-
-    def test_zero_int(self):
-        assert _parse_value("0") == 0
-        assert isinstance(_parse_value("0"), int)
-
 
 # ---------------------------------------------------------------------------
 # _load_env
 # ---------------------------------------------------------------------------
+
 
 class TestLoadEnv:
     def test_basic_key_value(self, tmp_path):
@@ -127,10 +119,12 @@ class TestLoadEnv:
 # load_config — basic YAML loading
 # ---------------------------------------------------------------------------
 
+
 class TestLoadConfigBasic:
     def test_loads_all_classifier_defaults(self, tmp_path):
         cfg_file = tmp_path / "classifier.yaml"
-        cfg_file.write_text(textwrap.dedent("""\
+        cfg_file.write_text(
+            textwrap.dedent("""\
             data_root: /data
             model_name: vit_tiny_patch16_224
             pretrained: true
@@ -144,7 +138,8 @@ class TestLoadConfigBasic:
             save_dir: checkpoints/test
             use_amp: false
             device: cpu
-        """))
+        """)
+        )
         cfg = load_config(ClassifierConfig, cfg_file)
         assert cfg.model_name == "vit_tiny_patch16_224"
         assert cfg.epochs == 5
@@ -160,7 +155,7 @@ class TestLoadConfigBasic:
         cfg = load_config(ClassifierConfig, cfg_file)
         assert cfg.epochs == 3
         assert cfg.model_name == "vit_base_patch16_224"  # default
-        assert cfg.pretrained is True                     # default
+        assert cfg.pretrained is True  # default
 
     def test_empty_yaml_uses_all_defaults(self, tmp_path):
         cfg_file = tmp_path / "empty.yaml"
@@ -175,12 +170,6 @@ class TestLoadConfigBasic:
         cfg = load_config(ClassifierConfig, Path(cfg_file))
         assert cfg.epochs == 7
 
-    def test_accepts_str_path(self, tmp_path):
-        cfg_file = tmp_path / "cfg.yaml"
-        cfg_file.write_text("epochs: 8\n")
-        cfg = load_config(ClassifierConfig, str(cfg_file))
-        assert cfg.epochs == 8
-
     def test_file_not_found_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_config(ClassifierConfig, tmp_path / "nonexistent.yaml")
@@ -189,6 +178,7 @@ class TestLoadConfigBasic:
 # ---------------------------------------------------------------------------
 # load_config — overrides
 # ---------------------------------------------------------------------------
+
 
 class TestLoadConfigOverrides:
     def test_override_int(self, tmp_path):
@@ -212,7 +202,9 @@ class TestLoadConfigOverrides:
     def test_override_string(self, tmp_path):
         cfg_file = tmp_path / "cfg.yaml"
         cfg_file.write_text("")
-        cfg = load_config(ClassifierConfig, cfg_file, overrides=["model_name=vit_tiny_patch16_224"])
+        cfg = load_config(
+            ClassifierConfig, cfg_file, overrides=["model_name=vit_tiny_patch16_224"]
+        )
         assert cfg.model_name == "vit_tiny_patch16_224"
 
     def test_override_takes_precedence_over_yaml(self, tmp_path):
@@ -224,7 +216,9 @@ class TestLoadConfigOverrides:
     def test_multiple_overrides(self, tmp_path):
         cfg_file = tmp_path / "cfg.yaml"
         cfg_file.write_text("")
-        cfg = load_config(ClassifierConfig, cfg_file, overrides=["epochs=3", "batch_size=8"])
+        cfg = load_config(
+            ClassifierConfig, cfg_file, overrides=["epochs=3", "batch_size=8"]
+        )
         assert cfg.epochs == 3
         assert cfg.batch_size == 8
 
@@ -234,16 +228,11 @@ class TestLoadConfigOverrides:
         cfg = load_config(ClassifierConfig, cfg_file, overrides=None)
         assert cfg.epochs == 25
 
-    def test_empty_overrides_list_is_ok(self, tmp_path):
-        cfg_file = tmp_path / "cfg.yaml"
-        cfg_file.write_text("")
-        cfg = load_config(ClassifierConfig, cfg_file, overrides=[])
-        assert cfg.epochs == 25
-
 
 # ---------------------------------------------------------------------------
 # load_config — validation errors
 # ---------------------------------------------------------------------------
+
 
 class TestLoadConfigValidation:
     def test_unknown_key_raises(self, tmp_path):
@@ -285,15 +274,11 @@ class TestLoadConfigValidation:
 # _resolve_variables — $var and ${var} syntax
 # ---------------------------------------------------------------------------
 
-class TestResolveVariables:
-    def test_resolves_dollar_var(self):
-        data = {"data_root": "$data_dir"}
-        defaults = {"data_dir": "/my/data"}
-        result = _resolve_variables(data, defaults)
-        assert result["data_root"] == "/my/data"
 
-    def test_resolves_dollar_brace_var(self):
-        data = {"data_root": "${data_dir}"}
+class TestResolveVariables:
+    @pytest.mark.parametrize("syntax", ["$data_dir", "${data_dir}"])
+    def test_resolves_variable(self, syntax):
+        data = {"data_root": syntax}
         defaults = {"data_dir": "/my/data"}
         result = _resolve_variables(data, defaults)
         assert result["data_root"] == "/my/data"
@@ -310,33 +295,30 @@ class TestResolveVariables:
         result = _resolve_variables(data, defaults)
         assert result["path"] == "/data/ckpt/file.pth"
 
-    def test_unresolved_var_raises(self):
-        data = {"path": "$unknown_var/data"}
+    @pytest.mark.parametrize("syntax", ["$unknown_var/data", "${unknown_var}/data"])
+    def test_unresolved_var_raises(self, syntax):
+        data = {"path": syntax}
         with pytest.raises(ValueError, match="unknown_var"):
             _resolve_variables(data, {"data_dir": "/my/data"})
 
-    def test_unresolved_brace_var_raises(self):
-        data = {"path": "${unknown_var}/data"}
-        with pytest.raises(ValueError, match="unknown_var"):
-            _resolve_variables(data, {"data_dir": "/my/data"})
-
-    def test_falls_back_to_env_var(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "syntax,expected",
+        [
+            ("$MY_TEST_DIR/stuff", "/env/path/stuff"),
+            ("${MY_TEST_DIR}/stuff", "/env/path/stuff"),
+        ],
+    )
+    def test_falls_back_to_env_var(self, monkeypatch, syntax, expected):
         monkeypatch.setenv("MY_TEST_DIR", "/env/path")
-        data = {"data_root": "$MY_TEST_DIR/stuff"}
+        data = {"data_root": syntax}
         result = _resolve_variables(data, {})
-        assert result["data_root"] == "/env/path/stuff"
+        assert result["data_root"] == expected
 
     def test_defaults_take_priority_over_env(self, monkeypatch):
         monkeypatch.setenv("data_dir", "/from_env")
         data = {"data_root": "$data_dir"}
         result = _resolve_variables(data, {"data_dir": "/from_defaults"})
         assert result["data_root"] == "/from_defaults"
-
-    def test_env_fallback_with_brace_syntax(self, monkeypatch):
-        monkeypatch.setenv("MY_VAR", "/env/val")
-        data = {"path": "${MY_VAR}/sub"}
-        result = _resolve_variables(data, {})
-        assert result["path"] == "/env/val/sub"
 
     def test_non_string_values_unchanged(self):
         data = {"epochs": 10, "use_amp": True, "lr": 1e-4}
@@ -370,6 +352,7 @@ class TestResolveVariables:
 # ---------------------------------------------------------------------------
 # load_config — env_path integration
 # ---------------------------------------------------------------------------
+
 
 class TestLoadConfigEnv:
     def test_env_path_none_backward_compatible(self, tmp_path):

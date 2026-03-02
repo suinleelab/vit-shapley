@@ -82,7 +82,7 @@ def leave_one_out(
     prob_np = prob.cpu().numpy()  # (P+1, C)
     # Attribution = grand − leave-one-out
     grand_prob = prob_np[0:1, :]  # (1, C)
-    loo_prob = prob_np[1:, :]     # (P, C)
+    loo_prob = prob_np[1:, :]  # (P, C)
     attributions = (grand_prob - loo_prob).T  # (C, P)
     return attributions
 
@@ -161,8 +161,8 @@ def rise(
             else:
                 prob = logits.softmax(dim=-1)
 
-            prob_list.append(prob.cpu().numpy())    # (batch_size, C)
-            mask_list.append(mask.cpu().numpy())    # (batch_size, P)
+            prob_list.append(prob.cpu().numpy())  # (batch_size, C)
+            mask_list.append(mask.cpu().numpy())  # (batch_size, P)
     if was_training:
         surrogate.train()
 
@@ -170,8 +170,8 @@ def rise(
     mask_arr = np.concatenate(mask_list, axis=0)  # (N, P)
 
     # Weighted average: (C, N) @ (N, P) / (N,) → (C, P)
-    numerator = prob_arr.T @ mask_arr              # (C, P)
-    denominator = mask_arr.sum(axis=0)             # (P,)
+    numerator = prob_arr.T @ mask_arr  # (C, P)
+    denominator = mask_arr.sum(axis=0)  # (P,)
     # Avoid division by zero (unlikely but guard against it).
     denominator = np.maximum(denominator, 1e-8)
-    return numerator / denominator                 # (C, P)
+    return numerator / denominator  # (C, P)

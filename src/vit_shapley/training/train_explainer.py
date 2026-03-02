@@ -54,9 +54,7 @@ def shapley_kernel_weights(num_patches: int) -> list[float]:
 
     for k in range(1, n):
         # log C(n,k) = lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1)
-        log_binom = (
-            math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
-        )
+        log_binom = math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
         log_w = log_n_minus_1 - log_binom - math.log(k) - math.log(n - k)
         weights[k] = math.exp(log_w)
 
@@ -99,8 +97,7 @@ def sample_shapley_masks(
     n = num_patches
     if paired and num_mask_samples % 2 != 0:
         raise ValueError(
-            "num_mask_samples must be even when paired=True; "
-            f"got {num_mask_samples}"
+            f"num_mask_samples must be even when paired=True; got {num_mask_samples}"
         )
 
     # Number of "base" masks to generate before optionally complementing.
@@ -124,7 +121,10 @@ def sample_shapley_masks(
     thresholds = thresholds.unsqueeze(1)  # (num_total, 1)
 
     rand_vals = torch.rand(
-        num_total, n, device=device, generator=generator,
+        num_total,
+        n,
+        device=device,
+        generator=generator,
     )
     masks_flat = (rand_vals > thresholds).float()  # (num_total, n)
 
@@ -148,6 +148,7 @@ def train_one_epoch_explainer(
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
     scaler: Optional[torch.amp.GradScaler] = None,
     surrogate_device: Optional[torch.device] = None,
+    gradient_accumulation_steps: int = 1,
 ) -> dict[str, float]:
     """Run one explainer training epoch.
 
@@ -159,7 +160,13 @@ def train_one_epoch_explainer(
     Optional paired sampling (S and 1−S) gives antithetic variance reduction.
 
     The surrogate is frozen; only the explainer parameters are updated.
-    The LR scheduler, if provided, is stepped once per gradient update.
+    The LR scheduler, if provided, is stepped once per optimizer step (not
+    per micro-batch).
+
+    When ``gradient_accumulation_steps > 1`` the loss from each micro-batch
+    is divided by that factor before calling ``.backward()``, so the
+    effective batch size is ``loader.batch_size × gradient_accumulation_steps``
+    while peak GPU memory stays proportional to ``loader.batch_size``.
 
     Args:
         explainer: The :class:`~vit_shapley.models.ExplainerViT` being trained.
@@ -173,6 +180,8 @@ def train_one_epoch_explainer(
         scaler: :class:`torch.amp.GradScaler` for AMP, or ``None``.
         surrogate_device: Device for the frozen surrogate. When ``None``, the
             surrogate is assumed to be on the same device as the explainer.
+        gradient_accumulation_steps: Number of micro-batches to accumulate
+            before each optimizer step (default: 1, i.e. no accumulation).
 
     Returns:
         Dict with ``"loss"`` (mean scaled MSE loss per sample).
@@ -184,27 +193,38 @@ def train_one_epoch_explainer(
     total_loss = 0.0
     total_samples = 0
     num_patches = surrogate.vit.patch_embed.num_patches
+    accum = gradient_accumulation_steps
 
-    for images, _ in tqdm(loader, desc="Train", leave=False):
+    optimizer.zero_grad()
+
+    for step_idx, (images, _) in enumerate(tqdm(loader, desc="Train", leave=False)):
         images = images.to(device, non_blocking=True)
         B = images.size(0)
-
-        optimizer.zero_grad()
 
         use_amp = scaler is not None
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             with torch.no_grad():
                 surr_autocast = surrogate_device.type == "cuda"
-                with torch.amp.autocast(device_type=surrogate_device.type, enabled=surr_autocast):
+                with torch.amp.autocast(
+                    device_type=surrogate_device.type, enabled=surr_autocast
+                ):
                     surr_images = images.to(surrogate_device)
 
                     # Null value v(∅; x): all patches masked out
                     null_mask = torch.zeros(B, num_patches, device=surrogate_device)
-                    null_probs = surrogate(surr_images, patch_mask=null_mask).softmax(dim=-1).to(device)
+                    null_probs = (
+                        surrogate(surr_images, patch_mask=null_mask)
+                        .softmax(dim=-1)
+                        .to(device)
+                    )
 
                     # Grand value v(1; x): all patches visible
                     grand_mask = torch.ones(B, num_patches, device=surrogate_device)
-                    grand_probs = surrogate(surr_images, patch_mask=grand_mask).softmax(dim=-1).to(device)
+                    grand_probs = (
+                        surrogate(surr_images, patch_mask=grand_mask)
+                        .softmax(dim=-1)
+                        .to(device)
+                    )
 
                     # Sample masks (B, M, n) from the Shapley distribution
                     masks = sample_shapley_masks(
@@ -213,12 +233,14 @@ def train_one_epoch_explainer(
 
                     # Surrogate values for each mask: v(S; x) for all S
                     # Flatten to (B*M, n), repeat images to (B*M, C, H, W)
-                    masks_flat = masks.flatten(0, 1)                        # (B*M, n)
+                    masks_flat = masks.flatten(0, 1)  # (B*M, n)
                     images_rep = surr_images.repeat_interleave(num_mask_samples, dim=0)
                     surr_flat = surrogate(
                         images_rep, patch_mask=masks_flat.to(surrogate_device)
                     ).softmax(dim=-1)
-                    surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(device)  # (B, M, C)
+                    surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(
+                        device
+                    )  # (B, M, C)
 
             # Shapley predictions φ'(x): (B, n, C)
             # Explainer normalises internally given grand and null.
@@ -231,21 +253,31 @@ def train_one_epoch_explainer(
 
             # Scaled MSE loss (factor n matches reference)
             loss = num_patches * F.mse_loss(v_approx, surrogate_values)
+            # Scale by accumulation factor so gradients average correctly
+            scaled_loss = loss / accum
 
         if use_amp:
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(explainer.parameters(), max_norm=1.0)
-            scaler.step(optimizer)
-            scaler.update()
+            scaler.scale(scaled_loss).backward()
         else:
-            loss.backward()
-            nn.utils.clip_grad_norm_(explainer.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaled_loss.backward()
 
-        if scheduler is not None:
-            scheduler.step()
+        # Step optimizer every `accum` micro-batches or at the last batch
+        if (step_idx + 1) % accum == 0 or (step_idx + 1) == len(loader):
+            if use_amp:
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(explainer.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                nn.utils.clip_grad_norm_(explainer.parameters(), max_norm=1.0)
+                optimizer.step()
 
+            if scheduler is not None:
+                scheduler.step()
+
+            optimizer.zero_grad()
+
+        # Track the unscaled loss for reporting
         total_loss += loss.item() * B
         total_samples += B
 
@@ -301,10 +333,14 @@ def evaluate_explainer(
 
         # Null and grand values
         null_mask = torch.zeros(B, num_patches, device=surrogate_device)
-        null_probs = surrogate(surr_images, patch_mask=null_mask).softmax(dim=-1).to(device)
+        null_probs = (
+            surrogate(surr_images, patch_mask=null_mask).softmax(dim=-1).to(device)
+        )
 
         grand_mask = torch.ones(B, num_patches, device=surrogate_device)
-        grand_probs = surrogate(surr_images, patch_mask=grand_mask).softmax(dim=-1).to(device)
+        grand_probs = (
+            surrogate(surr_images, patch_mask=grand_mask).softmax(dim=-1).to(device)
+        )
 
         # Sample masks and compute surrogate values
         masks = sample_shapley_masks(
@@ -315,7 +351,9 @@ def evaluate_explainer(
         surr_flat = surrogate(
             images_rep, patch_mask=masks_flat.to(surrogate_device)
         ).softmax(dim=-1)
-        surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(device)  # (B, M, C)
+        surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(
+            device
+        )  # (B, M, C)
 
         # Shapley predictions
         phi = explainer(images, grand=grand_probs, null=null_probs)  # (B, n, C)
@@ -354,6 +392,7 @@ def train_explainer(
     surrogate_device: Optional[torch.device | str] = None,
     save_dir: Optional[str | os.PathLike] = None,
     use_amp: bool = True,
+    gradient_accumulation_steps: int = 1,
 ) -> dict[str, Any]:
     """Full explainer training loop with checkpointing.
 
@@ -378,6 +417,9 @@ def train_explainer(
             the surrogate is placed on the same device as the explainer.
         save_dir: Directory for checkpoints. Skipped if ``None``.
         use_amp: Enable mixed-precision training (CUDA only).
+        gradient_accumulation_steps: Number of micro-batches to accumulate
+            before each optimizer step (default: 1).  Set > 1 to reduce peak
+            GPU memory while keeping the effective batch size unchanged.
 
     Returns:
         History dict::
@@ -411,7 +453,9 @@ def train_explainer(
         explainer.parameters(), lr=lr, weight_decay=weight_decay
     )
 
-    total_steps = epochs * len(train_loader)
+    # Scheduler steps once per optimizer step, not per micro-batch
+    steps_per_epoch = math.ceil(len(train_loader) / gradient_accumulation_steps)
+    total_steps = epochs * steps_per_epoch
     scheduler = _cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
     amp_enabled = use_amp and device.type == "cuda"
@@ -431,15 +475,23 @@ def train_explainer(
 
     for epoch in range(1, epochs + 1):
         train_metrics = train_one_epoch_explainer(
-            explainer, surrogate, train_loader, optimizer, device,
+            explainer,
+            surrogate,
+            train_loader,
+            optimizer,
+            device,
             num_mask_samples=num_mask_samples,
             paired=paired,
             scheduler=scheduler,
             scaler=scaler,
             surrogate_device=surrogate_device,
+            gradient_accumulation_steps=gradient_accumulation_steps,
         )
         val_metrics = evaluate_explainer(
-            explainer, surrogate, val_loader, device,
+            explainer,
+            surrogate,
+            val_loader,
+            device,
             num_mask_samples=num_mask_samples,
             paired=paired,
             surrogate_device=surrogate_device,

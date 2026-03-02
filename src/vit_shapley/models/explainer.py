@@ -138,9 +138,7 @@ class ExplainerViT(nn.Module):
                 nn.Linear(hidden_dim, num_classes),
             ]
         else:
-            raise ValueError(
-                f"num_mlp_layers must be 1, 2, or 3; got {num_mlp_layers}"
-            )
+            raise ValueError(f"num_mlp_layers must be 1, 2, or 3; got {num_mlp_layers}")
 
         self.shapley_head = nn.Sequential(*mlp_layers)
 
@@ -167,7 +165,7 @@ class ExplainerViT(nn.Module):
         # backbone forward_features returns (B, 1+n, D) in timm 1.0+
         features = self.vit.forward_features(x)
         num_prefix = self.vit.num_prefix_tokens
-        cls_tokens = features[:, :num_prefix, :]   # (B, 1, D)
+        cls_tokens = features[:, :num_prefix, :]  # (B, 1, D)
         patch_tokens = features[:, num_prefix:, :]  # (B, n, D)
 
         if self.include_cls:
@@ -203,7 +201,7 @@ class ExplainerViT(nn.Module):
             n = pred.shape[1]
             # grand/null: (B, C) or broadcastable; pred.sum(dim=1): (B, C)
             residual = (grand - null - pred.sum(dim=1)) / n  # (B, C)
-            pred = pred + residual.unsqueeze(1)               # (B, n, C)
+            pred = pred + residual.unsqueeze(1)  # (B, n, C)
         elif self.normalization is not None:
             raise ValueError(f"Unsupported normalization: {self.normalization!r}")
 

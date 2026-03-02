@@ -6,6 +6,7 @@ data_root: $data_dir
 split: val
 sample_indices: [0, 1, 2, 3]
 class_indices: null
+masking_strategy: attn_mask
 output: figures/shapley_heatmaps.png
 image_size: 224
-device: ""
+device: "cuda:0"

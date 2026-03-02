@@ -1,5 +1,17 @@
 # Config System
 
+Config YAML files use `$data_dir` and `$checkpoint_dir` variables (shell-style syntax). These are resolved automatically from a `.env` file in the project root:
+
+```bash
+# .env
+data_dir=/sdata/chanwkim/vit-shapley-data
+checkpoint_dir=checkpoints
+```
+
+Scripts load `.env` by default — no extra flags needed. You can also point to a different file with `--env path/to/other.env`, or use shell environment variables instead (`.env` values take priority over shell env vars).
+
+Override any config value with `--set KEY=VALUE` (e.g. `--set epochs=10 lr=1e-4`). `--set` overrides apply last and take final precedence.
+
 All scripts are driven by YAML config files. Default configs are in `configs/`.
 Override any value with `--set KEY=VALUE`:
 

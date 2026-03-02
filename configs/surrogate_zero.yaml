@@ -2,7 +2,7 @@
 classifier_ckpt: $checkpoint_dir/classifier/best_classifier.pth
 data_root: $data_dir
 model_name: vit_base_patch16_224
-masking_strategy: attn_mask
+masking_strategy: zero_input
 epochs: 50
 batch_size: 64
 lr: 1.0e-5
@@ -10,7 +10,7 @@ weight_decay: 1.0e-5
 warmup_steps: 500
 num_workers: 4
 image_size: 224
-save_dir: $checkpoint_dir/surrogate
+save_dir: $checkpoint_dir/surrogate_zero
 use_amp: true
-device: ""
-classifier_device: ""
+device: "cuda:0"
+classifier_device: "cuda:0"

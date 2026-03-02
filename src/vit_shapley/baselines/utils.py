@@ -67,12 +67,12 @@ def generate_mask(
         masks = (rng.rand(base, num_players) > rng.rand(base, 1)).astype(int)
     elif mode == "shapley":
         # Draw cardinality k ∝ 1/(k·(P−k)) then keep k patches.
-        ks = np.arange(1, num_players)          # possible sizes {1, …, P-1}
+        ks = np.arange(1, num_players)  # possible sizes {1, …, P-1}
         probs = 1.0 / (ks * (num_players - ks))
         probs = probs / probs.sum()
         # Vectorised: threshold per row differs per sample.
         chosen_k = rng.choice(ks, size=(base, 1), p=probs)  # (base, 1)
-        thresholds = chosen_k / num_players                  # fraction to keep
+        thresholds = chosen_k / num_players  # fraction to keep
         masks = (rng.rand(base, num_players) > 1 - thresholds).astype(int)
     else:
         raise ValueError(f"'mode' must be 'uniform' or 'shapley'; got {mode!r}")
@@ -81,8 +81,8 @@ def generate_mask(
         masks = np.stack([masks, 1 - masks], axis=1).reshape(num_samples_, num_players)
 
     if num_mask_samples is None:
-        return masks.squeeze(0)   # (P,)
-    return masks                  # (N, P)
+        return masks.squeeze(0)  # (P,)
+    return masks  # (N, P)
 
 
 def get_random_explanation(

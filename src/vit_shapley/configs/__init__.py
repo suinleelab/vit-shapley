@@ -1,10 +1,10 @@
 """Pydantic config classes and YAML loader for all ViT-Shapley scripts."""
 
-from .loader import load_config
 from .classifier import ClassifierConfig
-from .surrogate import SurrogateConfig
 from .explainer import ExplainerConfig
+from .loader import load_config
 from .plot import PlotConfig
+from .surrogate import SurrogateConfig
 from .visualize import VisualizeConfig
 
 __all__ = [

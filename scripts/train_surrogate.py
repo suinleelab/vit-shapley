@@ -16,6 +16,7 @@ Example
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -34,7 +35,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Train a ViT surrogate on ImageNette (Stage 2 of ViT-Shapley).",
     )
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config file."
+    )
     parser.add_argument(
         "--env",
         type=str,
@@ -56,7 +59,9 @@ def main() -> None:
         if cfg.device
         else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
-    classifier_device = torch.device(cfg.classifier_device) if cfg.classifier_device else device
+    classifier_device = (
+        torch.device(cfg.classifier_device) if cfg.classifier_device else device
+    )
     print(f"Using device: {device} (classifier: {classifier_device})")
 
     print("Loading datasets …")
@@ -120,6 +125,14 @@ def main() -> None:
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
     )
+
+    # Save config and training history as JSON
+    save_dir = Path(cfg.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    with open(save_dir / "config.json", "w") as f:
+        json.dump(cfg.model_dump(), f, indent=2)
+    with open(save_dir / "history.json", "w") as f:
+        json.dump(history, f, indent=2)
 
     print(
         f"\nTraining complete. "

@@ -16,8 +16,8 @@ from scipy import stats
 from vit_shapley.training.train_explainer import sample_shapley_masks
 from vit_shapley.training.train_surrogate import sample_subset_masks
 
-
 # ── Reference implementation (copied from ref/vit-shapley/main.py) ───────────
+
 
 def _ref_generate_mask(
     num_players: int,
@@ -44,8 +44,7 @@ def _ref_generate_mask(
         ).astype("int")
     elif mode == "shapley":
         probs = 1 / (
-            np.arange(1, num_players)
-            * (num_players - np.arange(1, num_players))
+            np.arange(1, num_players) * (num_players - np.arange(1, num_players))
         )
         probs = probs / probs.sum()
         masks = (
@@ -105,15 +104,20 @@ class TestSampleSubsetMasksVsReference:
 
         # Current implementation
         masks_cur = sample_subset_masks(
-            NUM_SAMPLES_LARGE, n, torch.device("cpu"),
+            NUM_SAMPLES_LARGE,
+            n,
+            torch.device("cpu"),
         )
         cards_cur = masks_cur.sum(dim=1).long().numpy()
 
         # Reference implementation
         rs = np.random.RandomState(42)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="uniform", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="uniform",
+            random_state=rs,
         )
         cards_ref = masks_ref.sum(axis=1)
 
@@ -123,7 +127,8 @@ class TestSampleSubsetMasksVsReference:
         # Chi-squared test for current
         observed_cur = np.bincount(cards_cur, minlength=n + 1)
         chi2_cur, p_cur = stats.chisquare(
-            observed_cur, f_exp=[expected_freq] * (n + 1),
+            observed_cur,
+            f_exp=[expected_freq] * (n + 1),
         )
         assert p_cur > CHI2_ALPHA, (
             f"Current cardinality not uniform: chi2={chi2_cur:.1f}, p={p_cur:.4f}"
@@ -132,7 +137,8 @@ class TestSampleSubsetMasksVsReference:
         # Chi-squared test for reference
         observed_ref = np.bincount(cards_ref.astype(int), minlength=n + 1)
         chi2_ref, p_ref = stats.chisquare(
-            observed_ref, f_exp=[expected_freq] * (n + 1),
+            observed_ref,
+            f_exp=[expected_freq] * (n + 1),
         )
         assert p_ref > CHI2_ALPHA, (
             f"Reference cardinality not uniform: chi2={chi2_ref:.1f}, p={p_ref:.4f}"
@@ -143,14 +149,19 @@ class TestSampleSubsetMasksVsReference:
         n = NUM_PLAYERS
 
         masks_cur = sample_subset_masks(
-            NUM_SAMPLES_LARGE, n, torch.device("cpu"),
+            NUM_SAMPLES_LARGE,
+            n,
+            torch.device("cpu"),
         )
         cards_cur = masks_cur.sum(dim=1).numpy()
 
         rs = np.random.RandomState(123)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="uniform", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="uniform",
+            random_state=rs,
         )
         cards_ref = masks_ref.sum(axis=1).astype(float)
 
@@ -164,7 +175,9 @@ class TestSampleSubsetMasksVsReference:
         n = NUM_PLAYERS
 
         masks_cur = sample_subset_masks(
-            NUM_SAMPLES_LARGE, n, torch.device("cpu"),
+            NUM_SAMPLES_LARGE,
+            n,
+            torch.device("cpu"),
         )
         inclusion_rates = masks_cur.mean(dim=0).numpy()
         # Under uniform cardinality, E[inclusion] = 0.5
@@ -172,8 +185,11 @@ class TestSampleSubsetMasksVsReference:
 
         rs = np.random.RandomState(0)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="uniform", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="uniform",
+            random_state=rs,
         )
         inclusion_rates_ref = masks_ref.mean(axis=0)
         np.testing.assert_allclose(inclusion_rates_ref, 0.5, atol=0.02)
@@ -186,7 +202,9 @@ class TestSampleSubsetMasksVsReference:
         n = NUM_PLAYERS
 
         masks = sample_subset_masks(
-            NUM_SAMPLES_LARGE, n, torch.device("cpu"),
+            NUM_SAMPLES_LARGE,
+            n,
+            torch.device("cpu"),
         )
         # Compute pairwise correlation between patch 0 and patch 1
         p0 = masks[:, 0].numpy()
@@ -218,26 +236,38 @@ class TestSampleShapleyMasksVsReference:
 
     def test_output_shape_unpaired(self):
         masks = sample_shapley_masks(
-            4, NUM_PLAYERS, 8, paired=False,
+            4,
+            NUM_PLAYERS,
+            8,
+            paired=False,
         )
         assert masks.shape == (4, 8, NUM_PLAYERS)
 
     def test_output_shape_paired(self):
         masks = sample_shapley_masks(
-            4, NUM_PLAYERS, 8, paired=True,
+            4,
+            NUM_PLAYERS,
+            8,
+            paired=True,
         )
         assert masks.shape == (4, 8, NUM_PLAYERS)
 
     def test_binary_values(self):
         masks = sample_shapley_masks(
-            10, NUM_PLAYERS, 8, paired=True,
+            10,
+            NUM_PLAYERS,
+            8,
+            paired=True,
         )
         assert torch.all((masks == 0.0) | (masks == 1.0))
 
     def test_paired_complement(self):
         """Second half of masks should be complement of first half."""
         masks = sample_shapley_masks(
-            4, NUM_PLAYERS, 8, paired=True,
+            4,
+            NUM_PLAYERS,
+            8,
+            paired=True,
         )
         first_half = masks[:, :4, :]
         second_half = masks[:, 4:, :]
@@ -251,15 +281,21 @@ class TestSampleShapleyMasksVsReference:
 
         # Current implementation (unpaired to avoid pairing effects)
         masks_cur = sample_shapley_masks(
-            1, n, num_masks, paired=False,
+            1,
+            n,
+            num_masks,
+            paired=False,
         ).squeeze(0)  # (num_masks, n)
         cards_cur = masks_cur.sum(dim=1).numpy()
 
         # Reference implementation
         rs = np.random.RandomState(42)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=num_masks,
-            paired_mask_samples=False, mode="shapley", random_state=rs,
+            n,
+            num_mask_samples=num_masks,
+            paired_mask_samples=False,
+            mode="shapley",
+            random_state=rs,
         )
         cards_ref = masks_ref.sum(axis=1).astype(float)
 
@@ -287,7 +323,10 @@ class TestSampleShapleyMasksVsReference:
 
         # Current
         masks_cur = sample_shapley_masks(
-            1, n, NUM_SAMPLES_LARGE, paired=False,
+            1,
+            n,
+            NUM_SAMPLES_LARGE,
+            paired=False,
         ).squeeze(0)
         cards_cur = masks_cur.sum(dim=1)
         frac_empty_cur = (cards_cur == 0).float().mean().item()
@@ -296,8 +335,11 @@ class TestSampleShapleyMasksVsReference:
         # Reference
         rs = np.random.RandomState(42)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="shapley", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="shapley",
+            random_state=rs,
         )
         cards_ref = masks_ref.sum(axis=1)
         frac_empty_ref = (cards_ref == 0).mean()
@@ -309,8 +351,7 @@ class TestSampleShapleyMasksVsReference:
             f"ref={frac_empty_ref:.3f}"
         )
         assert abs(frac_full_cur - frac_full_ref) < 0.02, (
-            f"Full mask rates differ: cur={frac_full_cur:.3f} "
-            f"ref={frac_full_ref:.3f}"
+            f"Full mask rates differ: cur={frac_full_cur:.3f} ref={frac_full_ref:.3f}"
         )
 
     def test_mean_cardinality_matches(self):
@@ -318,21 +359,26 @@ class TestSampleShapleyMasksVsReference:
         n = NUM_PLAYERS
 
         masks_cur = sample_shapley_masks(
-            1, n, NUM_SAMPLES_LARGE, paired=False,
+            1,
+            n,
+            NUM_SAMPLES_LARGE,
+            paired=False,
         ).squeeze(0)
         mean_cur = masks_cur.sum(dim=1).mean().item()
 
         rs = np.random.RandomState(0)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="shapley", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="shapley",
+            random_state=rs,
         )
         mean_ref = masks_ref.sum(axis=1).mean()
 
         # Should be close (both centered around n/2 for Shapley weights)
         assert abs(mean_cur - mean_ref) < 0.2, (
-            f"Mean cardinality differs: current={mean_cur:.2f}, "
-            f"ref={mean_ref:.2f}"
+            f"Mean cardinality differs: current={mean_cur:.2f}, ref={mean_ref:.2f}"
         )
 
     def test_within_cardinality_correlation_shapley(self):
@@ -341,7 +387,10 @@ class TestSampleShapleyMasksVsReference:
         n = NUM_PLAYERS
 
         masks = sample_shapley_masks(
-            1, n, NUM_SAMPLES_LARGE, paired=False,
+            1,
+            n,
+            NUM_SAMPLES_LARGE,
+            paired=False,
         ).squeeze(0)
         p0 = masks[:, 0].numpy()
         p1 = masks[:, 1].numpy()
@@ -356,14 +405,20 @@ class TestSampleShapleyMasksVsReference:
         n = NUM_PLAYERS
 
         masks_cur = sample_shapley_masks(
-            1, n, NUM_SAMPLES_LARGE, paired=False,
+            1,
+            n,
+            NUM_SAMPLES_LARGE,
+            paired=False,
         ).squeeze(0)
         rates_cur = masks_cur.mean(dim=0).numpy()
 
         rs = np.random.RandomState(7)
         masks_ref = _ref_generate_mask(
-            n, num_mask_samples=NUM_SAMPLES_LARGE,
-            paired_mask_samples=False, mode="shapley", random_state=rs,
+            n,
+            num_mask_samples=NUM_SAMPLES_LARGE,
+            paired_mask_samples=False,
+            mode="shapley",
+            random_state=rs,
         )
         rates_ref = masks_ref.mean(axis=0)
 
@@ -414,7 +469,9 @@ class TestMaskGenerationEdgeCases:
     def test_subset_masks_two_patches(self):
         """With 2 patches, cardinalities should be uniform over {0,1,2}."""
         masks = sample_subset_masks(
-            NUM_SAMPLES_LARGE, 2, torch.device("cpu"),
+            NUM_SAMPLES_LARGE,
+            2,
+            torch.device("cpu"),
         )
         cards = masks.sum(dim=1).long().numpy()
         counts = np.bincount(cards, minlength=3)
@@ -425,7 +482,10 @@ class TestMaskGenerationEdgeCases:
     def test_shapley_masks_small_n(self):
         """Shapley masks with n=3 (smallest meaningful case)."""
         masks = sample_shapley_masks(
-            10, 3, 4, paired=True,
+            10,
+            3,
+            4,
+            paired=True,
         )
         assert masks.shape == (10, 4, 3)
         assert torch.all((masks == 0.0) | (masks == 1.0))

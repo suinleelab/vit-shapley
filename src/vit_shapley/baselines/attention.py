@@ -40,9 +40,7 @@ def compute_joint_attention(
         Float array ``(B, L, N, N)`` — cumulative rollout at each layer.
         ``result[:, -1, :, :]`` is the full rollout.
     """
-    assert attentions.ndim == 4, (
-        f"Expected (B, L, N, N); got shape {attentions.shape}"
-    )
+    assert attentions.ndim == 4, f"Expected (B, L, N, N); got shape {attentions.shape}"
     B, L, N, _ = attentions.shape
 
     if add_residual:
@@ -105,12 +103,12 @@ def attentions_to_explanation(
 
     if isinstance(mode, int):
         # Raw attention at a specific layer index.
-        return attn_res[:, mode, 0, 1:]     # (B, P)
+        return attn_res[:, mode, 0, 1:]  # (B, P)
     elif mode == "raw":
-        return attn_res[:, -1, 0, 1:]      # (B, P) — last layer
+        return attn_res[:, -1, 0, 1:]  # (B, P) — last layer
     elif mode == "rollout":
         rollout = compute_joint_attention(attn_res, add_residual=False)
-        return rollout[:, -1, 0, 1:]       # (B, P)
+        return rollout[:, -1, 0, 1:]  # (B, P)
     else:
         raise ValueError(
             f"'mode' must be 'rollout', 'raw', or an int layer index; got {mode!r}"

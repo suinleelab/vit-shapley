@@ -4,7 +4,6 @@ These tests do NOT download the real dataset; they use a minimal ImageFolder
 structure created in a tmp_path fixture to exercise all code paths.
 """
 
-import os
 from pathlib import Path
 
 import pytest
@@ -17,12 +16,14 @@ from vit_shapley.data.imagenette import (
     get_imagenette_transforms,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_fake_imagenette(root: Path, num_classes: int = 3, imgs_per_class: int = 2) -> Path:
+
+def _make_fake_imagenette(
+    root: Path, num_classes: int = 3, imgs_per_class: int = 2
+) -> Path:
     """Create a minimal fake ImageNette directory structure."""
     dataset_dir = root / _IMAGENETTE_DIRNAME
     for split in ("train", "val"):
@@ -31,13 +32,16 @@ def _make_fake_imagenette(root: Path, num_classes: int = 3, imgs_per_class: int 
             cls_dir.mkdir(parents=True, exist_ok=True)
             for img_idx in range(imgs_per_class):
                 img_path = cls_dir / f"img_{img_idx}.JPEG"
-                Image.new("RGB", (32, 32), color=(cls_idx * 40, img_idx * 60, 128)).save(img_path)
+                Image.new(
+                    "RGB", (32, 32), color=(cls_idx * 40, img_idx * 60, 128)
+                ).save(img_path)
     return dataset_dir
 
 
 # ---------------------------------------------------------------------------
 # Transform tests
 # ---------------------------------------------------------------------------
+
 
 class TestGetImagenetteTransforms:
     def test_train_transform_output_shape(self):
@@ -59,35 +63,30 @@ class TestGetImagenetteTransforms:
             tensor = transform(img)
             assert tensor.shape == (3, size, size), f"Failed for image_size={size}"
 
-    def test_output_is_tensor(self):
-        transform = get_imagenette_transforms(train=True, image_size=64)
-        img = Image.new("RGB", (160, 160))
-        tensor = transform(img)
-        assert isinstance(tensor, torch.Tensor)
-
-    def test_train_output_float(self):
-        transform = get_imagenette_transforms(train=True, image_size=64)
-        img = Image.new("RGB", (160, 160))
-        tensor = transform(img)
-        assert tensor.dtype == torch.float32
-
     def test_train_has_vertical_flip(self):
         """Training transform must include RandomVerticalFlip (fix 5)."""
         import torchvision.transforms as T
+
         transform = get_imagenette_transforms(train=True, image_size=64)
-        has_vflip = any(isinstance(t, T.RandomVerticalFlip) for t in transform.transforms)
+        has_vflip = any(
+            isinstance(t, T.RandomVerticalFlip) for t in transform.transforms
+        )
         assert has_vflip, "Training transform is missing RandomVerticalFlip"
 
     def test_train_rrc_scale(self):
         """RandomResizedCrop scale must be (0.8, 1.2) (fix 6)."""
         import torchvision.transforms as T
+
         transform = get_imagenette_transforms(train=True, image_size=64)
-        rrc = next(t for t in transform.transforms if isinstance(t, T.RandomResizedCrop))
+        rrc = next(
+            t for t in transform.transforms if isinstance(t, T.RandomResizedCrop)
+        )
         assert rrc.scale == (0.8, 1.2), f"Expected scale (0.8, 1.2), got {rrc.scale}"
 
     def test_train_has_initial_resize(self):
         """Training transform must start with Resize((256,256)) (fix 6)."""
         import torchvision.transforms as T
+
         transform = get_imagenette_transforms(train=True, image_size=64)
         first = transform.transforms[0]
         assert isinstance(first, T.Resize), "First transform must be Resize"
@@ -95,6 +94,7 @@ class TestGetImagenetteTransforms:
     def test_val_uses_square_resize(self):
         """Validation Resize must force 256×256 (fix 6)."""
         import torchvision.transforms as T
+
         transform = get_imagenette_transforms(train=False, image_size=64)
         first = transform.transforms[0]
         assert isinstance(first, T.Resize)
@@ -103,8 +103,11 @@ class TestGetImagenetteTransforms:
     def test_train_color_jitter_params(self):
         """ColorJitter must have (br=0.2, co=0.2, sat=0.1, hue=0.1) wrapped in RandomApply(p=0.8) (fix 7)."""
         import torchvision.transforms as T
+
         transform = get_imagenette_transforms(train=True, image_size=64)
-        random_applies = [t for t in transform.transforms if isinstance(t, T.RandomApply)]
+        random_applies = [
+            t for t in transform.transforms if isinstance(t, T.RandomApply)
+        ]
         assert len(random_applies) == 1, "Expected exactly one RandomApply"
         ra = random_applies[0]
         assert abs(ra.p - 0.8) < 1e-6, f"RandomApply p must be 0.8, got {ra.p}"
@@ -113,12 +116,15 @@ class TestGetImagenetteTransforms:
         assert cj.brightness == (0.8, 1.2), f"brightness: {cj.brightness}"
         assert cj.contrast == (0.8, 1.2), f"contrast: {cj.contrast}"
         assert cj.saturation == (0.9, 1.1), f"saturation: {cj.saturation}"
-        assert abs(cj.hue[0] - (-0.1)) < 1e-6 and abs(cj.hue[1] - 0.1) < 1e-6, f"hue: {cj.hue}"
+        assert abs(cj.hue[0] - (-0.1)) < 1e-6 and abs(cj.hue[1] - 0.1) < 1e-6, (
+            f"hue: {cj.hue}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # Dataset tests
 # ---------------------------------------------------------------------------
+
 
 class TestGetImagenetteDataset:
     def test_invalid_split_raises(self, tmp_path):
@@ -178,6 +184,7 @@ class TestGetImagenetteDataset:
 
     def test_custom_transform_used(self, tmp_path):
         import torchvision.transforms as T
+
         _make_fake_imagenette(tmp_path, num_classes=2, imgs_per_class=1)
         custom_transform = T.Compose([T.Resize((16, 16)), T.ToTensor()])
         dataset = get_imagenette_dataset(

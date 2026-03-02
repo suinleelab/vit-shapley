@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless server — must be before pyplot import
 
 import torch
@@ -31,22 +32,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import VisualizeConfig, load_config
 from vit_shapley.data import get_imagenette_dataset
-from vit_shapley.models import build_vit_surrogate, build_vit_explainer
+from vit_shapley.models import build_vit_explainer, build_vit_surrogate
 from vit_shapley.visualization import compute_shapley_values, plot_shapley_heatmaps
 
 # Human-readable class names in the reference class-to-index ordering
 # (see IMAGENETTE_CLASSES in src/vit_shapley/data/imagenette.py)
 IMAGENETTE_CLASS_NAMES = [
-    "Cassette player",   # 0  n02979186
-    "Garbage truck",     # 1  n03417042
-    "Tench",             # 2  n01440764
+    "Cassette player",  # 0  n02979186
+    "Garbage truck",  # 1  n03417042
+    "Tench",  # 2  n01440764
     "English springer",  # 3  n02102040
-    "Church",            # 4  n03028079
-    "Parachute",         # 5  n03888257
-    "French horn",       # 6  n03394916
-    "Chain saw",         # 7  n03000684
-    "Golf ball",         # 8  n03445777
-    "Gas pump",          # 9  n03425413
+    "Church",  # 4  n03028079
+    "Parachute",  # 5  n03888257
+    "French horn",  # 6  n03394916
+    "Chain saw",  # 7  n03000684
+    "Golf ball",  # 8  n03445777
+    "Gas pump",  # 9  n03425413
 ]
 
 
@@ -54,7 +55,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Visualize Shapley value heatmaps from the ViT explainer.",
     )
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config file."
+    )
     parser.add_argument(
         "--env",
         type=str,
@@ -91,7 +94,7 @@ def main() -> None:
     images_list, labels_list = [], []
     for idx in cfg.sample_indices:
         img, label = dataset[idx]
-        images_list.append(img.numpy())   # CHW numpy
+        images_list.append(img.numpy())  # CHW numpy
         labels_list.append(label)
 
     # Determine heatmap columns
@@ -113,7 +116,7 @@ def main() -> None:
     surrogate = build_vit_surrogate(
         model_name=cfg.model_name,
         num_classes=num_classes,
-        masking_strategy="attn_mask",
+        masking_strategy=cfg.masking_strategy,
     )
     ckpt = torch.load(cfg.surrogate_ckpt, map_location="cpu", weights_only=True)
     surrogate.load_state_dict(ckpt.get("model_state_dict", ckpt))
@@ -131,7 +134,9 @@ def main() -> None:
     # -------------------------------------------------------- Shapley values --
     print("Computing Shapley values …")
     images_tensor = torch.stack([torch.from_numpy(img) for img in images_list])
-    phi, grand_probs = compute_shapley_values(explainer, surrogate, images_tensor, device)
+    phi, grand_probs = compute_shapley_values(
+        explainer, surrogate, images_tensor, device
+    )
 
     # ----------------------------------------------------------------- plot --
     print("Rendering figure …")

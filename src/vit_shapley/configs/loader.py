@@ -2,10 +2,10 @@
 
 import os
 import re
-import yaml
 from pathlib import Path
 from typing import Type, TypeVar
 
+import yaml
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
@@ -145,7 +145,7 @@ def load_config(
     data = _resolve_variables(data, defaults)
 
     # Overrides apply last (raw values, no variable resolution)
-    for kv in (overrides or []):
+    for kv in overrides or []:
         key, val = kv.split("=", 1)
         data[key] = _parse_value(val)
 

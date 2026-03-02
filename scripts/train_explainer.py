@@ -16,6 +16,7 @@ Example
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import ExplainerConfig, load_config
 from vit_shapley.data import get_imagenette_dataset
-from vit_shapley.models import build_vit_surrogate, build_vit_explainer
+from vit_shapley.models import build_vit_explainer, build_vit_surrogate
 from vit_shapley.training import train_explainer
 
 
@@ -34,7 +35,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Train a ViT explainer on ImageNette (Stage 3 of ViT-Shapley).",
     )
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config file."
+    )
     parser.add_argument(
         "--env",
         type=str,
@@ -56,7 +59,9 @@ def main() -> None:
         if cfg.device
         else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
-    surrogate_device = torch.device(cfg.surrogate_device) if cfg.surrogate_device else device
+    surrogate_device = (
+        torch.device(cfg.surrogate_device) if cfg.surrogate_device else device
+    )
     print(f"Using device: {device} (surrogate: {surrogate_device})")
 
     print("Loading datasets …")
@@ -93,7 +98,7 @@ def main() -> None:
         model_name=cfg.model_name,
         num_classes=num_classes,
         classifier_ckpt_path=None,
-        masking_strategy="attn_mask",
+        masking_strategy=cfg.masking_strategy,
     )
     ckpt = torch.load(cfg.surrogate_ckpt, map_location="cpu", weights_only=True)
     sd = ckpt.get("model_state_dict", ckpt)
@@ -122,7 +127,16 @@ def main() -> None:
         surrogate_device=surrogate_device,
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
+        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
     )
+
+    # Save config and training history as JSON
+    save_dir = Path(cfg.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    with open(save_dir / "config.json", "w") as f:
+        json.dump(cfg.model_dump(), f, indent=2)
+    with open(save_dir / "history.json", "w") as f:
+        json.dump(history, f, indent=2)
 
     print(
         f"\nTraining complete. "

@@ -120,7 +120,11 @@ def get_imagenette_transforms(
                 T.RandomVerticalFlip(p=0.5),
                 T.RandomHorizontalFlip(p=0.5),
                 T.RandomApply(
-                    [T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.1)],
+                    [
+                        T.ColorJitter(
+                            brightness=0.2, contrast=0.2, saturation=0.1, hue=0.1
+                        )
+                    ],
                     p=0.8,
                 ),
                 T.ToTensor(),
@@ -141,6 +145,7 @@ def get_imagenette_transforms(
 # ---------------------------------------------------------------------------
 # CSV-based dataset (used when noisy_imagenette.csv is present)
 # ---------------------------------------------------------------------------
+
 
 class ImageNetteCSVDataset(torch.utils.data.Dataset):
     """ImageNette dataset built from ``noisy_imagenette.csv``.
@@ -227,6 +232,7 @@ def _build_csv_dataset(
 # ImageFolder-based fallback (used when noisy_imagenette.csv is absent)
 # ---------------------------------------------------------------------------
 
+
 class _LabelledSubset(torch.utils.data.Subset):
     """Subset that exposes ``.classes`` and ``.class_to_idx`` from the parent dataset."""
 
@@ -252,7 +258,7 @@ def _split_val(val_dataset: ImageFolder, split: str) -> _LabelledSubset:
 
     # sklearn: test = perm[:n_test], train (→ our val) = perm[n_test:]
     if split == "val":
-        indices = sorted(perm[n_test:n_test + n_val].tolist())
+        indices = sorted(perm[n_test : n_test + n_val].tolist())
     else:  # "test"
         indices = sorted(perm[:n_test].tolist())
 
@@ -262,6 +268,7 @@ def _split_val(val_dataset: ImageFolder, split: str) -> _LabelledSubset:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def get_imagenette_dataset(
     root: str | os.PathLike,

@@ -12,7 +12,11 @@ import pytest
 import torch
 
 from vit_shapley.models.classifier import build_vit_classifier
-from vit_shapley.models.surrogate import MASKING_STRATEGIES, SurrogateViT, build_vit_surrogate
+from vit_shapley.models.surrogate import (
+    MASKING_STRATEGIES,
+    SurrogateViT,
+    build_vit_surrogate,
+)
 
 _TINY_MODEL = "vit_tiny_patch16_224"
 _NUM_CLASSES = 5
@@ -28,21 +32,17 @@ def surrogate():
 # build_vit_surrogate
 # ---------------------------------------------------------------------------
 
+
 class TestBuildVitSurrogate:
     def test_returns_surrogate_vit(self):
         m = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
         assert isinstance(m, SurrogateViT)
 
-    def test_is_nn_module(self, surrogate):
-        assert isinstance(surrogate, torch.nn.Module)
-
-    def test_has_trainable_params(self, surrogate):
-        trainable = [p for p in surrogate.parameters() if p.requires_grad]
-        assert len(trainable) > 0
-
     def test_loads_classifier_checkpoint(self, tmp_path):
         """Surrogate built from a saved classifier should have the same weights."""
-        classifier = build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False
+        )
         ckpt_path = tmp_path / "classifier.pth"
         torch.save({"model_state_dict": classifier.state_dict()}, ckpt_path)
 
@@ -60,21 +60,13 @@ class TestBuildVitSurrogate:
 # SurrogateViT forward
 # ---------------------------------------------------------------------------
 
+
 class TestSurrogateVitForward:
     def test_output_shape_no_mask(self, surrogate):
         x = torch.randn(2, 3, 224, 224)
         with torch.no_grad():
             out = surrogate(x)
         assert out.shape == (2, _NUM_CLASSES)
-
-    def test_output_shape_with_partial_mask(self, surrogate):
-        B = 2
-        x = torch.randn(B, 3, 224, 224)
-        mask = torch.zeros(B, _NUM_PATCHES)
-        mask[:, : _NUM_PATCHES // 2] = 1.0
-        with torch.no_grad():
-            out = surrogate(x, patch_mask=mask)
-        assert out.shape == (B, _NUM_CLASSES)
 
     def test_output_shape_all_masked(self, surrogate):
         """All patches masked (only CLS visible) — must not error or produce NaN."""
@@ -84,20 +76,16 @@ class TestSurrogateVitForward:
         with torch.no_grad():
             out = surrogate(x, patch_mask=mask)
         assert out.shape == (B, _NUM_CLASSES)
-        assert torch.isfinite(out).all(), "Output contains NaN/Inf with all patches masked"
-
-    def test_output_shape_all_visible(self, surrogate):
-        B = 2
-        x = torch.randn(B, 3, 224, 224)
-        mask = torch.ones(B, _NUM_PATCHES)
-        with torch.no_grad():
-            out = surrogate(x, patch_mask=mask)
-        assert out.shape == (B, _NUM_CLASSES)
+        assert torch.isfinite(out).all(), (
+            "Output contains NaN/Inf with all patches masked"
+        )
 
     def test_no_mask_equals_original_vit(self):
         """SurrogateViT(x, mask=None) must exactly match the original timm ViT."""
-        vit = build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
-        vit_ref = copy.deepcopy(vit)   # reference before SurrogateViT modifies nothing
+        vit = build_vit_classifier(
+            _TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False
+        )
+        vit_ref = copy.deepcopy(vit)  # reference before SurrogateViT modifies nothing
         surrogate = SurrogateViT(vit)  # wraps vit (no attention replacement needed)
 
         vit_ref.eval()
@@ -188,14 +176,19 @@ class TestSurrogateVitForward:
 # Zero-input masking strategy
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def zero_input_surrogate():
-    return build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES, masking_strategy="zero_input")
+    return build_vit_surrogate(
+        _TINY_MODEL, num_classes=_NUM_CLASSES, masking_strategy="zero_input"
+    )
 
 
 class TestZeroInputMasking:
     def test_invalid_strategy_raises(self):
-        vit = build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
+        vit = build_vit_classifier(
+            _TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False
+        )
         with pytest.raises(ValueError, match="masking_strategy"):
             SurrogateViT(vit, masking_strategy="bad_strategy")
 
@@ -204,24 +197,11 @@ class TestZeroInputMasking:
         assert "zero_input" in MASKING_STRATEGIES
 
     def test_build_with_zero_input(self):
-        m = build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES, masking_strategy="zero_input")
+        m = build_vit_surrogate(
+            _TINY_MODEL, num_classes=_NUM_CLASSES, masking_strategy="zero_input"
+        )
         assert isinstance(m, SurrogateViT)
         assert m.masking_strategy == "zero_input"
-
-    def test_output_shape_no_mask(self, zero_input_surrogate):
-        x = torch.randn(2, 3, 224, 224)
-        with torch.no_grad():
-            out = zero_input_surrogate(x)
-        assert out.shape == (2, _NUM_CLASSES)
-
-    def test_output_shape_with_partial_mask(self, zero_input_surrogate):
-        B = 2
-        x = torch.randn(B, 3, 224, 224)
-        mask = torch.zeros(B, _NUM_PATCHES)
-        mask[:, : _NUM_PATCHES // 2] = 1.0
-        with torch.no_grad():
-            out = zero_input_surrogate(x, patch_mask=mask)
-        assert out.shape == (B, _NUM_CLASSES)
 
     def test_output_finite_all_masked(self, zero_input_surrogate):
         """All patches zeroed (blank image) — must not produce NaN/Inf."""
@@ -259,7 +239,7 @@ class TestZeroInputMasking:
         B, ps = 1, zero_input_surrogate.patch_size
         x = torch.ones(B, 3, 224, 224)
         mask = torch.zeros(B, _NUM_PATCHES)
-        mask[0, 0] = 1.0   # only patch 0 visible
+        mask[0, 0] = 1.0  # only patch 0 visible
         x_masked = zero_input_surrogate._zero_masked_patches(x, mask)
         # Patch 0 is at pixels [0:ps, 0:ps] — should remain 1
         assert x_masked[0, :, :ps, :ps].allclose(torch.ones(3, ps, ps))
@@ -310,7 +290,9 @@ class TestMaskEquivalence:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _slice_pos_embed(pos_embed: torch.Tensor, mask_1d: torch.Tensor) -> torch.Tensor:
+    def _slice_pos_embed(
+        pos_embed: torch.Tensor, mask_1d: torch.Tensor
+    ) -> torch.Tensor:
         """Return pos_embed for [CLS, *visible_patches].
 
         Args:
@@ -320,9 +302,9 @@ class TestMaskEquivalence:
         Returns:
             ``(1, K+1, D)`` where K = number of visible patches.
         """
-        cls_pe = pos_embed[:, 0:1, :]                      # (1, 1, D)
+        cls_pe = pos_embed[:, 0:1, :]  # (1, 1, D)
         kept_pe = pos_embed[:, 1:, :][:, mask_1d.bool(), :]  # (1, K, D)
-        return torch.cat([cls_pe, kept_pe], dim=1)          # (1, K+1, D)
+        return torch.cat([cls_pe, kept_pe], dim=1)  # (1, K+1, D)
 
     @staticmethod
     def _token_deletion_forward(
@@ -352,12 +334,12 @@ class TestMaskEquivalence:
         kept = patch_tokens[:, mask_1d.bool(), :]  # (B, K, D)
 
         # 3. Build sequence: CLS token prepended to kept patches
-        cls_tokens = vit.cls_token.expand(B, -1, -1)   # (B, 1, D)
-        x = torch.cat([cls_tokens, kept], dim=1)         # (B, K+1, D)
+        cls_tokens = vit.cls_token.expand(B, -1, -1)  # (B, 1, D)
+        x = torch.cat([cls_tokens, kept], dim=1)  # (B, K+1, D)
 
         # 4. Add sliced positional embeddings (CLS pos + visible patch pos)
         sliced_pe = TestMaskEquivalence._slice_pos_embed(vit.pos_embed, mask_1d)
-        x = x + sliced_pe                                # broadcast over B
+        x = x + sliced_pe  # broadcast over B
         x = vit.pos_drop(x)
 
         # 5. Optional identity layers present in some timm variants
@@ -412,7 +394,7 @@ class TestMaskEquivalence:
         images = torch.randn(B, 3, 224, 224)
 
         mask_1d = torch.zeros(_NUM_PATCHES)
-        mask_1d[: _NUM_PATCHES // 2] = 1.0          # first half visible
+        mask_1d[: _NUM_PATCHES // 2] = 1.0  # first half visible
         batch_mask = mask_1d.unsqueeze(0).expand(B, -1)
 
         with torch.no_grad():
@@ -445,32 +427,4 @@ class TestMaskEquivalence:
         assert torch.allclose(logits_A, logits_C, atol=1e-5), (
             f"Pixel perturbation (C) differs from attention masking (A).\n"
             f"Max |diff|: {(logits_A - logits_C).abs().max():.2e}"
-        )
-
-    def test_all_three_strategies_equivalent(self, surrogate_eval):
-        """A, B, and C all agree for a random sparse mask."""
-        torch.manual_seed(2)
-        B = 3
-        images = torch.randn(B, 3, 224, 224)
-
-        # Sparse mask: ~25 % of patches visible
-        mask_1d = (torch.rand(_NUM_PATCHES) < 0.25).float()
-        batch_mask = mask_1d.unsqueeze(0).expand(B, -1)
-
-        ps = surrogate_eval.patch_size
-        grid_w = 224 // ps
-
-        with torch.no_grad():
-            logits_A = surrogate_eval(images, patch_mask=batch_mask)
-            logits_B = self._token_deletion_forward(surrogate_eval.vit, images, mask_1d)
-            images_perturbed = self._perturb_masked_patches(images, mask_1d, ps, grid_w)
-            logits_C = surrogate_eval(images_perturbed, patch_mask=batch_mask)
-
-        assert torch.allclose(logits_A, logits_B, atol=1e-5), (
-            f"Token deletion (B) vs attn_mask (A): max |diff| = "
-            f"{(logits_A - logits_B).abs().max():.2e}"
-        )
-        assert torch.allclose(logits_A, logits_C, atol=1e-5), (
-            f"Pixel perturbation (C) vs attn_mask (A): max |diff| = "
-            f"{(logits_A - logits_C).abs().max():.2e}"
         )

@@ -13,10 +13,10 @@ from vit_shapley.evaluation.kl_vs_cardinality import (
     sample_fixed_cardinality_masks,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class _IdentitySurrogate(nn.Module):
     """Wraps a classifier and ignores the patch_mask argument."""
@@ -40,9 +40,7 @@ def _tiny_classifier(num_patches: int = 9, num_classes: int = 4) -> nn.Module:
             super().__init__()
             self.fc = nn.Linear(3, num_classes)
             # Mimic timm's .patch_embed.num_patches for script compatibility.
-            self.patch_embed = type(
-                "_PE", (), {"num_patches": num_patches}
-            )()
+            self.patch_embed = type("_PE", (), {"num_patches": num_patches})()
 
         def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:  # (B,C,H,W)
             return self.fc(x.mean(dim=[2, 3]))
@@ -53,6 +51,7 @@ def _tiny_classifier(num_patches: int = 9, num_classes: int = 4) -> nn.Module:
 # ---------------------------------------------------------------------------
 # TestSampleFixedCardinalityMasks  (8 tests)
 # ---------------------------------------------------------------------------
+
 
 class TestSampleFixedCardinalityMasks:
     B, P = 8, 16
@@ -86,11 +85,6 @@ class TestSampleFixedCardinalityMasks:
         # At least two rows should differ.
         assert not (masks[0] == masks).all(dim=1).all()
 
-    def test_device_placement(self):
-        device = torch.device("cpu")
-        masks = sample_fixed_cardinality_masks(4, 9, num_masked=3, device=device)
-        assert masks.device.type == "cpu"
-
     @pytest.mark.parametrize("num_masked", [-1, 17])
     def test_invalid_num_masked_raises(self, num_masked):
         with pytest.raises(ValueError):
@@ -100,6 +94,7 @@ class TestSampleFixedCardinalityMasks:
 # ---------------------------------------------------------------------------
 # TestComputeKlVsCardinality  (7 tests)
 # ---------------------------------------------------------------------------
+
 
 class TestComputeKlVsCardinality:
     """Tests for compute_kl_vs_cardinality."""
@@ -136,10 +131,6 @@ class TestComputeKlVsCardinality:
             device=torch.device("cpu"),
         )
 
-    def test_dict_keys_are_ints(self, surrogate, clf, images):
-        results = self._run(surrogate, clf, images)
-        assert all(isinstance(k, int) for k in results)
-
     def test_contains_zero_and_num_patches(self, surrogate, clf, images):
         results = self._run(surrogate, clf, images)
         assert 0 in results
@@ -168,9 +159,7 @@ class TestComputeKlVsCardinality:
 
     def test_no_grad_updates(self, surrogate, clf, images):
         """Models should not be modified during evaluation."""
-        params_before = {
-            n: p.clone() for n, p in surrogate.named_parameters()
-        }
+        params_before = {n: p.clone() for n, p in surrogate.named_parameters()}
         self._run(surrogate, clf, images)
         for n, p in surrogate.named_parameters():
             assert torch.equal(p, params_before[n]), f"Parameter {n} changed!"

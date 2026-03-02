@@ -89,7 +89,7 @@ class _EmbeddingWrapper(nn.Module):
             Tensor ``(B, num_classes)`` of class probabilities.
         """
         vit = self.vit
-        x = vit._pos_embed(embedding)   # adds CLS token + positional encoding
+        x = vit._pos_embed(embedding)  # adds CLS token + positional encoding
         x = vit.patch_drop(x)
         x = vit.norm_pre(x)
         x = vit.blocks(x)
@@ -119,8 +119,12 @@ def _aggregate_pixel(
     """
     x = attributions if signed else attributions.abs()
     weight = torch.ones(
-        1, x.shape[1], patch_size, patch_size,
-        dtype=x.dtype, device=x.device,
+        1,
+        x.shape[1],
+        patch_size,
+        patch_size,
+        dtype=x.dtype,
+        device=x.device,
     )
     # F.conv2d with stride=patch_size sums each patch region.
     patch_scores = F.conv2d(x, weight=weight, stride=patch_size)  # (D, 1, Ph, Pw)
@@ -243,7 +247,9 @@ def get_smoothgrad(
         attributions_list = []
         for c in range(output_dim):
             nt = NoiseTunnel(Saliency(wrapper))
-            attr = nt.attribute(image, nt_type="smoothgrad", nt_samples=n_samples, target=c)
+            attr = nt.attribute(
+                image, nt_type="smoothgrad", nt_samples=n_samples, target=c
+            )
             attributions_list.append(attr)
         attributions = torch.cat(attributions_list, dim=0)  # (D, C, H, W)
         return _aggregate_pixel(attributions, patch_size)
@@ -255,7 +261,9 @@ def get_smoothgrad(
         attributions_list = []
         for c in range(output_dim):
             nt = NoiseTunnel(Saliency(wrapper))
-            attr = nt.attribute(embedding.detach(), nt_type="smoothgrad", nt_samples=n_samples, target=c)
+            attr = nt.attribute(
+                embedding.detach(), nt_type="smoothgrad", nt_samples=n_samples, target=c
+            )
             attributions_list.append(attr)
         attributions = torch.cat(attributions_list, dim=0)  # (D, P, D_emb)
         return _aggregate_embedding(attributions)
@@ -300,7 +308,9 @@ def get_vargrad(
         attributions_list = []
         for c in range(output_dim):
             nt = NoiseTunnel(Saliency(wrapper))
-            attr = nt.attribute(image, nt_type="vargrad", nt_samples=n_samples, target=c)
+            attr = nt.attribute(
+                image, nt_type="vargrad", nt_samples=n_samples, target=c
+            )
             attributions_list.append(attr)
         attributions = torch.cat(attributions_list, dim=0)  # (D, C, H, W)
         return _aggregate_pixel(attributions, patch_size)
@@ -312,7 +322,9 @@ def get_vargrad(
         attributions_list = []
         for c in range(output_dim):
             nt = NoiseTunnel(Saliency(wrapper))
-            attr = nt.attribute(embedding.detach(), nt_type="vargrad", nt_samples=n_samples, target=c)
+            attr = nt.attribute(
+                embedding.detach(), nt_type="vargrad", nt_samples=n_samples, target=c
+            )
             attributions_list.append(attr)
         attributions = torch.cat(attributions_list, dim=0)  # (D, P, D_emb)
         return _aggregate_embedding(attributions)
@@ -360,7 +372,9 @@ def get_integrated_gradients(
         attributions_list = []
         for c in range(output_dim):
             ig = IntegratedGradients(wrapper)
-            attr = ig.attribute(image, baselines=baseline_pixel, target=c, n_steps=n_steps)
+            attr = ig.attribute(
+                image, baselines=baseline_pixel, target=c, n_steps=n_steps
+            )
             attributions_list.append(attr)
         attributions = torch.cat(attributions_list, dim=0)  # (D, C, H, W)
         return _aggregate_pixel(attributions, patch_size, signed=True)

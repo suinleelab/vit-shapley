@@ -19,12 +19,13 @@ _TINY_MODEL = "vit_tiny_patch16_224"
 _IMG_SIZE = 224
 _PATCH_SIZE = 16
 _NUM_PATCHES = (_IMG_SIZE // _PATCH_SIZE) ** 2  # 196
-_N_TOKENS = _NUM_PATCHES + 1                    # 197 (CLS + patches)
+_N_TOKENS = _NUM_PATCHES + 1  # 197 (CLS + patches)
 
 
 @pytest.fixture(scope="module")
 def tiny_vit():
     import timm
+
     model = timm.create_model(_TINY_MODEL, pretrained=False, num_classes=10)
     model.eval()
     return model
@@ -33,6 +34,7 @@ def tiny_vit():
 # ---------------------------------------------------------------------------
 # compute_joint_attention
 # ---------------------------------------------------------------------------
+
 
 class TestComputeJointAttention:
     def test_shape_preserved(self):
@@ -77,6 +79,7 @@ class TestComputeJointAttention:
 # attentions_to_explanation
 # ---------------------------------------------------------------------------
 
+
 class TestAttentionsToExplanation:
     def _make_attentions(self, B=2, L=4, H=3, N=_N_TOKENS):
         rng = np.random.default_rng(42)
@@ -84,21 +87,12 @@ class TestAttentionsToExplanation:
         # Normalise rows within each head (simulate softmax).
         return raw / raw.sum(axis=-1, keepdims=True)
 
-    def test_shape_rollout(self):
+    @pytest.mark.parametrize("mode", ["rollout", "raw", 2])
+    def test_output_shape(self, mode):
         attn = self._make_attentions()
         B = attn.shape[0]
-        result = attentions_to_explanation(attn, mode="rollout")
+        result = attentions_to_explanation(attn, mode=mode)
         assert result.shape == (B, _NUM_PATCHES)
-
-    def test_shape_raw(self):
-        attn = self._make_attentions()
-        result = attentions_to_explanation(attn, mode="raw")
-        assert result.shape == (attn.shape[0], _NUM_PATCHES)
-
-    def test_shape_int_mode(self):
-        attn = self._make_attentions(L=4)
-        result = attentions_to_explanation(attn, mode=2)
-        assert result.shape == (attn.shape[0], _NUM_PATCHES)
 
     def test_values_nonnegative(self):
         attn = self._make_attentions()
@@ -119,6 +113,7 @@ class TestAttentionsToExplanation:
 # ---------------------------------------------------------------------------
 # extract_attention_maps
 # ---------------------------------------------------------------------------
+
 
 class TestExtractAttentionMaps:
     def test_output_shape(self, tiny_vit):
@@ -170,8 +165,9 @@ class TestExtractAttentionMaps:
 
         for i, blk in enumerate(tiny_vit.blocks):
             if i in orig_vals:
-                assert blk.attn.fused_attn == orig_vals[i], \
+                assert blk.attn.fused_attn == orig_vals[i], (
                     f"Block {i} fused_attn not restored"
+                )
 
     def test_pipeline_to_explanation(self, tiny_vit):
         """Full pipeline: extract maps → attentions_to_explanation gives (B, P)."""

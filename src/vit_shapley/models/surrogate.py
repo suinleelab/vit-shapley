@@ -37,7 +37,6 @@ import timm
 import torch
 import torch.nn as nn
 
-
 MASKING_STRATEGIES = ("attn_mask", "zero_input")
 
 
@@ -183,9 +182,7 @@ def build_vit_surrogate(
     vit = timm.create_model(model_name, pretrained=False, num_classes=num_classes)
 
     if classifier_ckpt_path is not None:
-        ckpt = torch.load(
-            classifier_ckpt_path, map_location="cpu", weights_only=True
-        )
+        ckpt = torch.load(classifier_ckpt_path, map_location="cpu", weights_only=True)
         state_dict = ckpt.get("model_state_dict", ckpt)
         vit.load_state_dict(state_dict)
 

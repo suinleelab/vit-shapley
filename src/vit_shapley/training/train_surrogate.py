@@ -41,10 +41,13 @@ def _cosine_schedule_with_warmup(
         :class:`torch.optim.lr_scheduler.LambdaLR` ready to be stepped after
         each optimizer step.
     """
+
     def lr_lambda(step: int) -> float:
         if step < warmup_steps:
             return float(step) / float(max(1, warmup_steps))
-        progress = float(step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        progress = float(step - warmup_steps) / float(
+            max(1, total_steps - warmup_steps)
+        )
         return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
@@ -76,10 +79,16 @@ def sample_subset_masks(
         ``0.0`` = masked.
     """
     rand_vals = torch.rand(
-        batch_size, num_patches, device=device, generator=generator,
+        batch_size,
+        num_patches,
+        device=device,
+        generator=generator,
     )
     thresholds = torch.rand(
-        batch_size, 1, device=device, generator=generator,
+        batch_size,
+        1,
+        device=device,
+        generator=generator,
     )
     masks = (rand_vals > thresholds).float()
     return masks
@@ -139,7 +148,9 @@ def train_one_epoch_surrogate(
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             with torch.no_grad():
                 clf_autocast = classifier_device.type == "cuda"
-                with torch.amp.autocast(device_type=classifier_device.type, enabled=clf_autocast):
+                with torch.amp.autocast(
+                    device_type=classifier_device.type, enabled=clf_autocast
+                ):
                     teacher_logits = classifier(images.to(classifier_device))
             teacher_probs = teacher_logits.to(device).softmax(dim=-1)
 
@@ -164,7 +175,9 @@ def train_one_epoch_surrogate(
             scheduler.step()
 
         total_loss += loss.item() * B
-        total_correct += (surrogate_logits.detach().argmax(dim=1) == labels).sum().item()
+        total_correct += (
+            (surrogate_logits.detach().argmax(dim=1) == labels).sum().item()
+        )
         total_samples += B
 
     return {
@@ -226,8 +239,12 @@ def evaluate_surrogate(
 
         patch_mask = sample_subset_masks(B, num_patches, device, generator=gen)
 
-        teacher_probs = classifier(images.to(classifier_device)).to(device).softmax(dim=-1)
-        surrogate_log_probs = surrogate(images, patch_mask=patch_mask).log_softmax(dim=-1)
+        teacher_probs = (
+            classifier(images.to(classifier_device)).to(device).softmax(dim=-1)
+        )
+        surrogate_log_probs = surrogate(images, patch_mask=patch_mask).log_softmax(
+            dim=-1
+        )
         loss = F.kl_div(surrogate_log_probs, teacher_probs, reduction="batchmean")
 
         # Accuracy on full-image surrogate predictions (mask=None)
@@ -334,11 +351,21 @@ def train_surrogate(
 
     for epoch in range(1, epochs + 1):
         train_metrics = train_one_epoch_surrogate(
-            surrogate, classifier, train_loader, optimizer, device, scaler, scheduler,
+            surrogate,
+            classifier,
+            train_loader,
+            optimizer,
+            device,
+            scaler,
+            scheduler,
             classifier_device=classifier_device,
         )
         val_metrics = evaluate_surrogate(
-            surrogate, classifier, val_loader, device, val_seed=0,
+            surrogate,
+            classifier,
+            val_loader,
+            device,
+            val_seed=0,
             classifier_device=classifier_device,
         )
 
