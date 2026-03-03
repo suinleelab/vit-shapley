@@ -149,6 +149,7 @@ def train_one_epoch_explainer(
     scaler: Optional[torch.amp.GradScaler] = None,
     surrogate_device: Optional[torch.device] = None,
     gradient_accumulation_steps: int = 1,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Run one explainer training epoch.
 
@@ -212,19 +213,19 @@ def train_one_epoch_explainer(
 
                     # Null value v(∅; x): all patches masked out
                     null_mask = torch.zeros(B, num_patches, device=surrogate_device)
-                    null_probs = (
-                        surrogate(surr_images, patch_mask=null_mask)
-                        .softmax(dim=-1)
-                        .to(device)
-                    )
+                    null_logits = surrogate(surr_images, patch_mask=null_mask)
+                    if target_type == "binary":
+                        null_probs = torch.sigmoid(null_logits).to(device)
+                    else:
+                        null_probs = null_logits.softmax(dim=-1).to(device)
 
                     # Grand value v(1; x): all patches visible
                     grand_mask = torch.ones(B, num_patches, device=surrogate_device)
-                    grand_probs = (
-                        surrogate(surr_images, patch_mask=grand_mask)
-                        .softmax(dim=-1)
-                        .to(device)
-                    )
+                    grand_logits = surrogate(surr_images, patch_mask=grand_mask)
+                    if target_type == "binary":
+                        grand_probs = torch.sigmoid(grand_logits).to(device)
+                    else:
+                        grand_probs = grand_logits.softmax(dim=-1).to(device)
 
                     # Sample masks (B, M, n) from the Shapley distribution
                     masks = sample_shapley_masks(
@@ -235,9 +236,13 @@ def train_one_epoch_explainer(
                     # Flatten to (B*M, n), repeat images to (B*M, C, H, W)
                     masks_flat = masks.flatten(0, 1)  # (B*M, n)
                     images_rep = surr_images.repeat_interleave(num_mask_samples, dim=0)
-                    surr_flat = surrogate(
+                    surr_logits_flat = surrogate(
                         images_rep, patch_mask=masks_flat.to(surrogate_device)
-                    ).softmax(dim=-1)
+                    )
+                    if target_type == "binary":
+                        surr_flat = torch.sigmoid(surr_logits_flat)
+                    else:
+                        surr_flat = surr_logits_flat.softmax(dim=-1)
                     surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(
                         device
                     )  # (B, M, C)
@@ -294,6 +299,7 @@ def evaluate_explainer(
     num_mask_samples: int = 32,
     paired: bool = True,
     surrogate_device: Optional[torch.device] = None,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Evaluate the explainer on the validation set.
 
@@ -333,14 +339,18 @@ def evaluate_explainer(
 
         # Null and grand values
         null_mask = torch.zeros(B, num_patches, device=surrogate_device)
-        null_probs = (
-            surrogate(surr_images, patch_mask=null_mask).softmax(dim=-1).to(device)
-        )
+        null_logits = surrogate(surr_images, patch_mask=null_mask)
+        if target_type == "binary":
+            null_probs = torch.sigmoid(null_logits).to(device)
+        else:
+            null_probs = null_logits.softmax(dim=-1).to(device)
 
         grand_mask = torch.ones(B, num_patches, device=surrogate_device)
-        grand_probs = (
-            surrogate(surr_images, patch_mask=grand_mask).softmax(dim=-1).to(device)
-        )
+        grand_logits = surrogate(surr_images, patch_mask=grand_mask)
+        if target_type == "binary":
+            grand_probs = torch.sigmoid(grand_logits).to(device)
+        else:
+            grand_probs = grand_logits.softmax(dim=-1).to(device)
 
         # Sample masks and compute surrogate values
         masks = sample_shapley_masks(
@@ -348,9 +358,13 @@ def evaluate_explainer(
         )
         masks_flat = masks.flatten(0, 1)
         images_rep = surr_images.repeat_interleave(num_mask_samples, dim=0)
-        surr_flat = surrogate(
+        surr_logits_flat = surrogate(
             images_rep, patch_mask=masks_flat.to(surrogate_device)
-        ).softmax(dim=-1)
+        )
+        if target_type == "binary":
+            surr_flat = torch.sigmoid(surr_logits_flat)
+        else:
+            surr_flat = surr_logits_flat.softmax(dim=-1)
         surrogate_values = surr_flat.view(B, num_mask_samples, -1).to(
             device
         )  # (B, M, C)
@@ -393,6 +407,7 @@ def train_explainer(
     save_dir: Optional[str | os.PathLike] = None,
     use_amp: bool = True,
     gradient_accumulation_steps: int = 1,
+    target_type: str = "multiclass",
 ) -> dict[str, Any]:
     """Full explainer training loop with checkpointing.
 
@@ -486,6 +501,7 @@ def train_explainer(
             scaler=scaler,
             surrogate_device=surrogate_device,
             gradient_accumulation_steps=gradient_accumulation_steps,
+            target_type=target_type,
         )
         val_metrics = evaluate_explainer(
             explainer,
@@ -495,6 +511,7 @@ def train_explainer(
             num_mask_samples=num_mask_samples,
             paired=paired,
             surrogate_device=surrogate_device,
+            target_type=target_type,
         )
 
         history["train_loss"].append(train_metrics["loss"])

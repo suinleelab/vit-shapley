@@ -4,9 +4,31 @@ explainer_ckpt: $checkpoint_dir/explainer_${dataset}/best_explainer.pth
 model_name: vit_base_patch16_224
 data_root: $data_dir
 split: val
-sample_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+sample_indices:
+  [
+    0,
+    200,
+    400,
+    600,
+    800,
+    1000,
+    1200,
+    1400,
+    1600,
+    1800,
+    2000,
+    2200,
+    2400,
+    2600,
+    2800,
+    3000,
+    3200,
+    3400,
+    3600,
+    3800,
+  ]
 class_indices: null
 masking_strategy: attn_mask
-output: figures/shapley_heatmaps_${dataset}.png
+output: figures/shapley_heatmaps_${dataset}.jpg
 image_size: 224
 device: "cuda:0"

@@ -2,13 +2,15 @@
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class VisualizeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # Required — no defaults. Must be provided in YAML or via --set.
     surrogate_ckpt: str
     explainer_ckpt: str
+    target_type: str = "multiclass"
     dataset: str = "imagenette"
     model_name: str = "vit_base_patch16_224"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"

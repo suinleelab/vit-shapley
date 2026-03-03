@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import SurrogateConfig, load_config
-from vit_shapley.data import get_dataset
+from vit_shapley.data import get_dataset, resolve_num_classes
 from vit_shapley.models import build_vit_classifier, build_vit_surrogate
 from vit_shapley.training import train_surrogate
 
@@ -89,8 +89,8 @@ def main() -> None:
         drop_last=True,
     )
 
-    num_classes = len(train_dataset.classes)
-    print(f"Classes ({num_classes}): {train_dataset.classes}")
+    num_classes = resolve_num_classes(train_dataset, cfg.target_type)
+    print(f"Classes ({len(train_dataset.classes)}): {train_dataset.classes}")
 
     # Build surrogate (initialised from classifier checkpoint).
     print(f"Building surrogate: {cfg.model_name} (masking={cfg.masking_strategy})")
@@ -124,6 +124,7 @@ def main() -> None:
         classifier_device=classifier_device,
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
+        target_type=cfg.target_type,
     )
 
     # Save config and training history as JSON

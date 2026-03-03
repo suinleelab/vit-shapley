@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import ExplainerConfig, load_config
-from vit_shapley.data import get_dataset
+from vit_shapley.data import get_dataset, resolve_num_classes
 from vit_shapley.models import build_vit_explainer, build_vit_surrogate
 from vit_shapley.training import train_explainer
 
@@ -89,8 +89,8 @@ def main() -> None:
         drop_last=True,
     )
 
-    num_classes = len(train_dataset.classes)
-    print(f"Classes ({num_classes}): {train_dataset.classes}")
+    num_classes = resolve_num_classes(train_dataset, cfg.target_type)
+    print(f"Classes ({len(train_dataset.classes)}): {train_dataset.classes}")
 
     # Build frozen surrogate from the Stage 2 checkpoint.
     print(f"Loading surrogate from: {cfg.surrogate_ckpt}")
@@ -128,6 +128,7 @@ def main() -> None:
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
+        target_type=cfg.target_type,
     )
 
     # Save config and training history as JSON

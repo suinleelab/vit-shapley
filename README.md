@@ -16,7 +16,7 @@ pip install -e ".[dev]"     # optional: pytest, ruff, jupyterlab
 pip install captum           # optional: gradient baselines
 ```
 
-## Pipeline
+## Workflow
 
 ```text
 Stage 1: Classifier          Obtain your initial ViT image classifier to explain
@@ -46,12 +46,17 @@ python scripts/visualize_explainer.py --config configs/visualize_explainer.yaml
 
 Switch dataset with `--set dataset=pet` on any command. All checkpoint paths and output filenames update automatically via `${dataset}` self-referencing in the YAML. See [Config System](docs/config.md) for details.
 
+For binary classification datasets like MURA, add `--set target_type=binary` to all pipeline commands. This switches the loss function (BCEWithLogitsLoss), KL divergence computation (sigmoid-based), and link function (sigmoid instead of softmax).
+
 ## Datasets
 
 | Name                   | Classes | Source                     |
 | ---------------------- | ------- | -------------------------- |
 | `imagenette` (default) | 10      | fast.ai subset of ImageNet |
+| `mura`                 | 2       | Stanford MURA X-rays       |
 | `pet`                  | 37      | Oxford-IIIT Pet            |
+
+MURA (Musculoskeletal Radiographs) is a binary classification dataset of bone X-ray images (negative/positive) across 7 body parts. It requires a Stanford AIMI license — download from [Stanford AIMI](https://stanfordaimi.azurewebsites.net/datasets/3e00d84b-d86e-4fed-b2a4-bfe3effd661b) and place at `<data_root>/MURA-v1.1/`. Use with `--set dataset=mura`.
 
 ## Testing
 
@@ -61,6 +66,6 @@ python -m pytest tests/ -v
 
 ## Documentation
 
-- [Config System](docs/config.md) — YAML variables, `--set` overrides, `.env`, multi-GPU
+- [Config](docs/config.md) — YAML variables, `--set` overrides, `.env`, multi-GPU
 - [Evaluation](docs/evaluation.md) — KL divergence plots and Shapley heatmaps
-- [Baselines](docs/baselines.md) — attention, perturbation, and gradient explanation methods
+    <!-- - [Baselines](docs/baselines.md) — attention, perturbation, and gradient explanation methods -->

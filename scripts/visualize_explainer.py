@@ -31,9 +31,10 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import VisualizeConfig, load_config
-from vit_shapley.data import get_dataset
+from vit_shapley.data import get_dataset, resolve_num_classes
 from vit_shapley.models import build_vit_explainer, build_vit_surrogate
 from vit_shapley.visualization import compute_shapley_values, plot_shapley_heatmaps
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -74,11 +75,13 @@ def main() -> None:
         image_size=cfg.image_size,
         download=False,
     )
-    num_classes = len(dataset.classes)
+    num_classes = resolve_num_classes(dataset, cfg.target_type)
 
     images_list, labels_list = [], []
     for idx in cfg.sample_indices:
-        img, label = dataset[idx]
+        img, label = dataset[
+            idx % len(dataset)
+        ]  # wrap around if idx exceeds dataset size
         images_list.append(img.numpy())  # CHW numpy
         labels_list.append(label)
 
@@ -121,7 +124,11 @@ def main() -> None:
     print("Computing Shapley values …")
     images_tensor = torch.stack([torch.from_numpy(img) for img in images_list])
     phi, grand_probs = compute_shapley_values(
-        explainer, surrogate, images_tensor, device
+        explainer,
+        surrogate,
+        images_tensor,
+        device,
+        target_type=cfg.target_type,
     )
 
     # ----------------------------------------------------------------- plot --

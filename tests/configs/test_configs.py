@@ -19,6 +19,7 @@ from vit_shapley.configs import (
 class TestClassifierConfig:
     def test_defaults(self):
         cfg = ClassifierConfig()
+        assert cfg.target_type == "multiclass"
         assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.pretrained is True
@@ -32,6 +33,10 @@ class TestClassifierConfig:
         assert cfg.save_dir == "checkpoints/classifier"
         assert cfg.use_amp is True
         assert cfg.device == ""
+
+    def test_target_type_binary(self):
+        cfg = ClassifierConfig(target_type="binary")
+        assert cfg.target_type == "binary"
 
     def test_dataset_pet(self):
         cfg = ClassifierConfig(dataset="pet")
@@ -60,6 +65,14 @@ class TestClassifierConfig:
         assert cfg.epochs == 10
         assert cfg.device == "cpu"
 
+    def test_extra_field_raises(self):
+        with pytest.raises(ValidationError, match="extra_field"):
+            ClassifierConfig(extra_field="oops")
+
+    def test_extra_field_model_validate_raises(self):
+        with pytest.raises(ValidationError, match="typo_key"):
+            ClassifierConfig.model_validate({"typo_key": 42})
+
 
 # ---------------------------------------------------------------------------
 # SurrogateConfig
@@ -73,6 +86,7 @@ class TestSurrogateConfig:
 
     def test_defaults(self):
         cfg = SurrogateConfig(classifier_ckpt="ckpt.pth")
+        assert cfg.target_type == "multiclass"
         assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.masking_strategy == "attn_mask"
@@ -85,11 +99,19 @@ class TestSurrogateConfig:
         assert cfg.device == ""
         assert cfg.classifier_device == ""
 
+    def test_target_type_binary(self):
+        cfg = SurrogateConfig(classifier_ckpt="ckpt.pth", target_type="binary")
+        assert cfg.target_type == "binary"
+
     def test_model_validate_with_required_field(self):
         data = {"classifier_ckpt": "ckpt.pth", "epochs": 10}
         cfg = SurrogateConfig.model_validate(data)
         assert cfg.epochs == 10
         assert cfg.classifier_ckpt == "ckpt.pth"
+
+    def test_extra_field_raises(self):
+        with pytest.raises(ValidationError, match="unknown_param"):
+            SurrogateConfig(classifier_ckpt="ckpt.pth", unknown_param="oops")
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +126,7 @@ class TestExplainerConfig:
 
     def test_defaults(self):
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth")
+        assert cfg.target_type == "multiclass"
         assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.epochs == 100
@@ -136,6 +159,10 @@ class TestExplainerConfig:
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", masking_strategy="zero_input")
         assert cfg.masking_strategy == "zero_input"
 
+    def test_target_type_binary(self):
+        cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", target_type="binary")
+        assert cfg.target_type == "binary"
+
     def test_surrogate_device_custom(self):
         cfg = ExplainerConfig(surrogate_ckpt="ckpt.pth", surrogate_device="cuda:1")
         assert cfg.surrogate_device == "cuda:1"
@@ -143,6 +170,10 @@ class TestExplainerConfig:
     def test_model_validate_missing_required_raises(self):
         with pytest.raises(ValidationError):
             ExplainerConfig.model_validate({"epochs": 50})
+
+    def test_extra_field_raises(self):
+        with pytest.raises(ValidationError, match="bad_key"):
+            ExplainerConfig(surrogate_ckpt="ckpt.pth", bad_key=True)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +206,7 @@ class TestPlotConfig:
             attn_surrogate_ckpt="attn.pth",
             zero_surrogate_ckpt="zero.pth",
         )
+        assert cfg.target_type == "multiclass"
         assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.num_images == 50
@@ -196,9 +228,27 @@ class TestPlotConfig:
         assert cfg.step == 5
         assert cfg.output == "out/fig.png"
 
+    def test_target_type_binary(self):
+        cfg = PlotConfig(
+            classifier_ckpt="clf.pth",
+            attn_surrogate_ckpt="attn.pth",
+            zero_surrogate_ckpt="zero.pth",
+            target_type="binary",
+        )
+        assert cfg.target_type == "binary"
+
     def test_model_validate_missing_ckpt_raises(self):
         with pytest.raises(ValidationError):
             PlotConfig.model_validate({"classifier_ckpt": "clf.pth"})
+
+    def test_extra_field_raises(self):
+        with pytest.raises(ValidationError, match="nonsense"):
+            PlotConfig(
+                classifier_ckpt="clf.pth",
+                attn_surrogate_ckpt="attn.pth",
+                zero_surrogate_ckpt="zero.pth",
+                nonsense=99,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +271,7 @@ class TestVisualizeConfig:
 
     def test_defaults(self):
         cfg = VisualizeConfig(surrogate_ckpt="surr.pth", explainer_ckpt="exp.pth")
+        assert cfg.target_type == "multiclass"
         assert cfg.dataset == "imagenette"
         assert cfg.model_name == "vit_base_patch16_224"
         assert cfg.split == "val"
@@ -274,6 +325,22 @@ class TestVisualizeConfig:
         )
         assert cfg.split == "train"
 
+    def test_target_type_binary(self):
+        cfg = VisualizeConfig(
+            surrogate_ckpt="surr.pth",
+            explainer_ckpt="exp.pth",
+            target_type="binary",
+        )
+        assert cfg.target_type == "binary"
+
     def test_model_validate_missing_ckpts_raises(self):
         with pytest.raises(ValidationError):
             VisualizeConfig.model_validate({"split": "val"})
+
+    def test_extra_field_raises(self):
+        with pytest.raises(ValidationError, match="wrong_key"):
+            VisualizeConfig(
+                surrogate_ckpt="surr.pth",
+                explainer_ckpt="exp.pth",
+                wrong_key="oops",
+            )

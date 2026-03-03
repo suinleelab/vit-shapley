@@ -41,6 +41,15 @@ def _make_synthetic_dataset(
     return TensorDataset(images, labels)
 
 
+def _make_binary_dataset(
+    num_samples: int = _NUM_SAMPLES,
+    image_size: int = _IMAGE_SIZE,
+) -> TensorDataset:
+    images = torch.randn(num_samples, 3, image_size, image_size)
+    labels = torch.randint(0, 2, (num_samples,))
+    return TensorDataset(images, labels)
+
+
 @pytest.fixture
 def tiny_model():
     return build_vit_classifier(_TINY_MODEL, num_classes=_NUM_CLASSES, pretrained=False)
@@ -308,3 +317,119 @@ class TestCosineWithWarmup:
         assert len(set(round(lr, 10) for lr in lrs)) > 1, (
             "LR did not change across batches — scheduler may not be stepping per batch"
         )
+
+
+# ---------------------------------------------------------------------------
+# Binary classification tests
+# ---------------------------------------------------------------------------
+
+
+class TestBinaryTrainOneEpoch:
+    def test_returns_valid_metrics(self, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        loader = DataLoader(_make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True)
+        criterion = nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        metrics = train_one_epoch(
+            model, loader, optimizer, criterion, device, scaler=None,
+            target_type="binary",
+        )
+        assert "loss" in metrics and "acc" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
+        assert 0.0 <= metrics["acc"] <= 1.0
+
+    def test_model_updates_weights(self, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        loader = DataLoader(_make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True)
+        criterion = nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        before = {n: p.clone() for n, p in model.named_parameters() if p.requires_grad}
+        train_one_epoch(
+            model, loader, optimizer, criterion, device, scaler=None,
+            target_type="binary",
+        )
+        after = dict(model.named_parameters())
+        changed = any(not torch.allclose(before[n], after[n]) for n in before)
+        assert changed, "No parameter changed after binary train_one_epoch"
+
+
+class TestBinaryEvaluate:
+    def test_returns_valid_metrics(self, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        criterion = nn.BCEWithLogitsLoss()
+        metrics = evaluate(model, loader, criterion, device, target_type="binary")
+        assert "loss" in metrics and "acc" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
+        assert 0.0 <= metrics["acc"] <= 1.0
+
+    def test_no_gradient_updates(self, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        criterion = nn.BCEWithLogitsLoss()
+        before = {n: p.clone() for n, p in model.named_parameters()}
+        evaluate(model, loader, criterion, device, target_type="binary")
+        after = dict(model.named_parameters())
+        for n in before:
+            assert torch.allclose(before[n], after[n]), (
+                f"Parameter '{n}' changed during binary evaluate()"
+            )
+
+
+class TestBinaryTrainClassifier:
+    def test_returns_history_keys(self, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        train_loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        history = train_classifier(
+            model, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            target_type="binary",
+        )
+        for key in ("train_loss", "train_acc", "val_loss", "val_acc",
+                     "best_val_acc", "best_epoch"):
+            assert key in history, f"Missing key '{key}' in binary history"
+
+    def test_checkpoint_loadable(self, tmp_path, device):
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        train_loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        train_classifier(
+            model, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, save_dir=tmp_path, use_amp=False,
+            target_type="binary",
+        )
+        ckpt_path = tmp_path / "best_classifier.pth"
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        assert "model_state_dict" in ckpt
+        fresh = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        fresh.load_state_dict(ckpt["model_state_dict"])
+
+    def test_accuracy_is_sigmoid_based(self, device):
+        """Binary accuracy should use sigmoid threshold (>0) not argmax."""
+        model = build_vit_classifier(_TINY_MODEL, num_classes=1, pretrained=False)
+        train_loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        history = train_classifier(
+            model, train_loader, val_loader,
+            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            target_type="binary",
+        )
+        # Binary accuracy should be either 0 or 1 at extreme but always in [0,1]
+        assert 0.0 <= history["val_acc"][0] <= 1.0

@@ -61,6 +61,7 @@ def compute_kl_vs_cardinality(
     cardinality_step: int = 10,
     device: Optional[torch.device] = None,
     seed: Optional[int] = None,
+    target_type: str = "multiclass",
 ) -> dict[int, list[float]]:
     """Compute per-sample KL divergence for each mask cardinality.
 
@@ -101,8 +102,8 @@ def compute_kl_vs_cardinality(
         generator = torch.Generator(device=device)
         generator.manual_seed(seed)
 
-    # Compute teacher probabilities once (full image, no masking).
-    teacher_probs = classifier(images).softmax(dim=-1)  # (N, C)
+    # Compute teacher logits once (full image, no masking).
+    teacher_logits = classifier(images)  # (N, C) or (N, 1)
 
     # Build cardinality list, always including num_patches.
     cardinalities = list(range(0, num_patches + 1, cardinality_step))
@@ -120,11 +121,23 @@ def compute_kl_vs_cardinality(
             )
             # surrogate expects patch_mask (B, num_patches).
             surrogate_logits = surrogate(images, patch_mask=mask)
-            surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)  # (N, C)
+
+            if target_type == "binary":
+                surr_log_probs = torch.cat(
+                    [F.logsigmoid(surrogate_logits), F.logsigmoid(-surrogate_logits)],
+                    dim=1,
+                )
+                teacher_probs = torch.cat(
+                    [torch.sigmoid(teacher_logits), torch.sigmoid(-teacher_logits)],
+                    dim=1,
+                )
+            else:
+                surr_log_probs = surrogate_logits.log_softmax(dim=-1)
+                teacher_probs = teacher_logits.softmax(dim=-1)
 
             # KL per sample: sum over classes.
             kl_per_sample = F.kl_div(
-                surrogate_log_probs, teacher_probs, reduction="none"
+                surr_log_probs, teacher_probs, reduction="none"
             ).sum(-1)  # (N,)
 
             results[m].extend(kl_per_sample.cpu().tolist())

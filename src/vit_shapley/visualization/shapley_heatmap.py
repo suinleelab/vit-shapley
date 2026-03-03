@@ -39,6 +39,7 @@ def compute_shapley_values(
     surrogate: torch.nn.Module,
     images: torch.Tensor,
     device: torch.device,
+    target_type: str = "multiclass",
 ) -> np.ndarray:
     """Run the surrogate + explainer to get per-patch Shapley estimates.
 
@@ -65,10 +66,18 @@ def compute_shapley_values(
     num_patches: int = surrogate.vit.patch_embed.num_patches
 
     null_mask = torch.zeros(B, num_patches, device=device)
-    null_probs = surrogate(images, patch_mask=null_mask).softmax(dim=-1)
+    null_logits = surrogate(images, patch_mask=null_mask)
+    if target_type == "binary":
+        null_probs = torch.sigmoid(null_logits)
+    else:
+        null_probs = null_logits.softmax(dim=-1)
 
     grand_mask = torch.ones(B, num_patches, device=device)
-    grand_probs = surrogate(images, patch_mask=grand_mask).softmax(dim=-1)
+    grand_logits = surrogate(images, patch_mask=grand_mask)
+    if target_type == "binary":
+        grand_probs = torch.sigmoid(grand_logits)
+    else:
+        grand_probs = grand_logits.softmax(dim=-1)
 
     phi = explainer(images, grand=grand_probs, null=null_probs)  # (B, n, C)
     return phi.cpu().numpy(), grand_probs.cpu().numpy()
@@ -98,7 +107,7 @@ def shapley_to_heatmap(
     grid_h: int,
     grid_w: int,
     cmap,
-    alpha: float = 0.9,
+    alpha: float = 0.6,
 ) -> np.ndarray:
     """Convert a flat per-patch Shapley vector to an RGBA heatmap.
 
@@ -146,10 +155,11 @@ def shapley_to_heatmap(
 
 
 def _grey_rgba(img_hwc: np.ndarray, alpha: float = 0.5) -> np.ndarray:
-    """Convert an HWC RGB image to an inverted-luminance greyscale RGBA array.
+    """Convert an HWC RGB image to a greyscale RGBA array.
 
-    Inverting the luminance (``1 - mean``) darkens bright image regions so
-    the heatmap overlay stands out more clearly against light backgrounds.
+    Computes average luminance across RGB channels, preserving the natural
+    brightness of the original image so it remains recognisable beneath the
+    heatmap overlay.
 
     Args:
         img_hwc: Float array ``(H, W, 3)`` with values in ``[0, 1]``.
@@ -158,7 +168,7 @@ def _grey_rgba(img_hwc: np.ndarray, alpha: float = 0.5) -> np.ndarray:
     Returns:
         RGBA float32 array ``(H, W, 4)``.
     """
-    grey = 1.0 - img_hwc.mean(axis=2)  # (H, W)
+    grey = img_hwc.mean(axis=2)  # (H, W)
     rgba = np.zeros((*grey.shape, 4), dtype=np.float32)
     rgba[..., :3] = grey[..., None]
     rgba[..., 3] = alpha
@@ -267,8 +277,8 @@ def plot_shapley_heatmaps(
             heat_rgba = shapley_to_heatmap(
                 phi[row, :, cls_idx], image_size, grid_size, grid_size, cmap
             )
-            ax_h.imshow(grey_rgba)
-            ax_h.imshow(heat_rgba)
+            ax_h.imshow(grey_rgba, alpha=0.85)
+            ax_h.imshow(heat_rgba, alpha=0.9)
 
             prob_str = (
                 f"{grand_probs[row, cls_idx]:.2f}" if grand_probs is not None else None

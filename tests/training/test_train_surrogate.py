@@ -42,6 +42,14 @@ def _make_synthetic_dataset(
     return TensorDataset(images, labels)
 
 
+def _make_binary_dataset(
+    num_samples: int = _NUM_SAMPLES,
+) -> TensorDataset:
+    images = torch.randn(num_samples, 3, _IMAGE_SIZE, _IMAGE_SIZE)
+    labels = torch.randint(0, 2, (num_samples,))
+    return TensorDataset(images, labels)
+
+
 @pytest.fixture
 def tiny_surrogate():
     return build_vit_surrogate(_TINY_MODEL, num_classes=_NUM_CLASSES)
@@ -545,3 +553,124 @@ class TestTrainSurrogate:
             use_amp=False,
         )
         assert abs(h1["val_loss"][0] - h2["val_loss"][0]) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Binary surrogate training tests
+# ---------------------------------------------------------------------------
+
+
+class TestBinaryTrainOneEpochSurrogate:
+    def test_returns_valid_metrics(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        optimizer = torch.optim.AdamW(surrogate.parameters(), lr=1e-4)
+        metrics = train_one_epoch_surrogate(
+            surrogate, classifier, loader, optimizer, device,
+            target_type="binary",
+        )
+        assert "loss" in metrics and "acc" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
+        assert 0.0 <= metrics["acc"] <= 1.0
+
+    def test_surrogate_weights_update(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        optimizer = torch.optim.AdamW(surrogate.parameters(), lr=1e-3)
+        before = {n: p.clone() for n, p in surrogate.named_parameters()}
+        train_one_epoch_surrogate(
+            surrogate, classifier, loader, optimizer, device,
+            target_type="binary",
+        )
+        after = dict(surrogate.named_parameters())
+        changed = any(not torch.allclose(before[n], after[n]) for n in before)
+        assert changed, "No surrogate parameter changed after binary training"
+
+
+class TestBinaryEvaluateSurrogate:
+    def test_returns_valid_metrics(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        metrics = evaluate_surrogate(
+            surrogate, classifier, loader, device, target_type="binary",
+        )
+        assert "loss" in metrics and "acc" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] > 0.0
+        assert 0.0 <= metrics["acc"] <= 1.0
+
+    def test_val_loss_reproducible(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        m1 = evaluate_surrogate(
+            surrogate, classifier, loader, device,
+            val_seed=7, target_type="binary",
+        )
+        m2 = evaluate_surrogate(
+            surrogate, classifier, loader, device,
+            val_seed=7, target_type="binary",
+        )
+        assert m1["loss"] == m2["loss"]
+
+
+class TestBinaryTrainSurrogate:
+    def test_returns_history_keys(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        train_ldr = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_ldr = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        history = train_surrogate(
+            surrogate, classifier, train_ldr, val_ldr,
+            epochs=1, lr=1e-4, device=device, save_dir=None, use_amp=False,
+            target_type="binary",
+        )
+        for key in ("train_loss", "val_loss", "val_acc", "best_val_loss", "best_epoch"):
+            assert key in history, f"Missing key '{key}'"
+
+    def test_checkpoint_loadable(self, tmp_path, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        classifier = build_vit_classifier(
+            _TINY_MODEL, num_classes=1, pretrained=False
+        )
+        train_ldr = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_ldr = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        train_surrogate(
+            surrogate, classifier, train_ldr, val_ldr,
+            epochs=1, lr=1e-4, device=device, save_dir=tmp_path, use_amp=False,
+            target_type="binary",
+        )
+        ckpt = torch.load(
+            tmp_path / "best_surrogate.pth", map_location="cpu", weights_only=True
+        )
+        assert "model_state_dict" in ckpt
+        fresh = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        fresh.load_state_dict(ckpt["model_state_dict"])

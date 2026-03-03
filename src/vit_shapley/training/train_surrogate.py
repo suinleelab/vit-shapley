@@ -103,6 +103,7 @@ def train_one_epoch_surrogate(
     scaler: Optional[torch.amp.GradScaler] = None,
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
     classifier_device: Optional[torch.device] = None,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Run one surrogate training epoch.
 
@@ -152,13 +153,34 @@ def train_one_epoch_surrogate(
                     device_type=classifier_device.type, enabled=clf_autocast
                 ):
                     teacher_logits = classifier(images.to(classifier_device))
-            teacher_probs = teacher_logits.to(device).softmax(dim=-1)
-
+            target_logits_dev = teacher_logits.to(device)
             surrogate_logits = surrogate(images, patch_mask=patch_mask)
-            surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)
 
-            # DKL(teacher || surrogate) — Eq. 2 / 14 of the paper
-            loss = F.kl_div(surrogate_log_probs, teacher_probs, reduction="batchmean")
+            if target_type == "binary":
+                # Sigmoid-based KL for binary classification
+                surr_log_probs = torch.cat(
+                    [F.logsigmoid(surrogate_logits), F.logsigmoid(-surrogate_logits)],
+                    dim=1,
+                )
+                target_probs = torch.cat(
+                    [
+                        torch.sigmoid(target_logits_dev),
+                        torch.sigmoid(-target_logits_dev),
+                    ],
+                    dim=1,
+                )
+                loss = F.kl_div(
+                    surr_log_probs,
+                    target_probs,
+                    reduction="batchmean",
+                    log_target=False,
+                )
+            else:
+                target_probs = target_logits_dev.softmax(dim=-1)
+                surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)
+                loss = F.kl_div(
+                    surrogate_log_probs, target_probs, reduction="batchmean"
+                )
 
         if use_amp:
             scaler.scale(loss).backward()
@@ -175,9 +197,16 @@ def train_one_epoch_surrogate(
             scheduler.step()
 
         total_loss += loss.item() * B
-        total_correct += (
-            (surrogate_logits.detach().argmax(dim=1) == labels).sum().item()
-        )
+        if target_type == "binary":
+            total_correct += (
+                ((surrogate_logits.detach().squeeze(-1) > 0).long() == labels)
+                .sum()
+                .item()
+            )
+        else:
+            total_correct += (
+                (surrogate_logits.detach().argmax(dim=1) == labels).sum().item()
+            )
         total_samples += B
 
     return {
@@ -194,6 +223,7 @@ def evaluate_surrogate(
     device: torch.device,
     val_seed: int = 0,
     classifier_device: Optional[torch.device] = None,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Evaluate the surrogate on the validation set.
 
@@ -239,17 +269,34 @@ def evaluate_surrogate(
 
         patch_mask = sample_subset_masks(B, num_patches, device, generator=gen)
 
-        teacher_probs = (
-            classifier(images.to(classifier_device)).to(device).softmax(dim=-1)
-        )
-        surrogate_log_probs = surrogate(images, patch_mask=patch_mask).log_softmax(
-            dim=-1
-        )
-        loss = F.kl_div(surrogate_log_probs, teacher_probs, reduction="batchmean")
+        teacher_logits = classifier(images.to(classifier_device)).to(device)
+        surrogate_logits = surrogate(images, patch_mask=patch_mask)
+
+        if target_type == "binary":
+            surr_log_probs = torch.cat(
+                [F.logsigmoid(surrogate_logits), F.logsigmoid(-surrogate_logits)],
+                dim=1,
+            )
+            teacher_probs = torch.cat(
+                [torch.sigmoid(teacher_logits), torch.sigmoid(-teacher_logits)],
+                dim=1,
+            )
+            loss = F.kl_div(
+                surr_log_probs, teacher_probs, reduction="batchmean", log_target=False
+            )
+        else:
+            teacher_probs = teacher_logits.softmax(dim=-1)
+            surrogate_log_probs = surrogate_logits.log_softmax(dim=-1)
+            loss = F.kl_div(surrogate_log_probs, teacher_probs, reduction="batchmean")
 
         # Accuracy on full-image surrogate predictions (mask=None)
         full_logits = surrogate(images, patch_mask=None)
-        total_correct += (full_logits.argmax(dim=1) == labels).sum().item()
+        if target_type == "binary":
+            total_correct += (
+                ((full_logits.squeeze(-1) > 0).long() == labels).sum().item()
+            )
+        else:
+            total_correct += (full_logits.argmax(dim=1) == labels).sum().item()
 
         total_loss += loss.item() * B
         total_samples += B
@@ -274,6 +321,7 @@ def train_surrogate(
     classifier_device: Optional[torch.device | str] = None,
     save_dir: Optional[str | os.PathLike] = None,
     use_amp: bool = True,
+    target_type: str = "multiclass",
 ) -> dict[str, Any]:
     """Full surrogate training loop with checkpointing.
 
@@ -359,6 +407,7 @@ def train_surrogate(
             scaler,
             scheduler,
             classifier_device=classifier_device,
+            target_type=target_type,
         )
         val_metrics = evaluate_surrogate(
             surrogate,
@@ -367,6 +416,7 @@ def train_surrogate(
             device,
             val_seed=0,
             classifier_device=classifier_device,
+            target_type=target_type,
         )
 
         history["train_loss"].append(train_metrics["loss"])

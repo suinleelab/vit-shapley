@@ -11,6 +11,8 @@ import torch
 from PIL import Image
 
 from vit_shapley.data.imagenette import (
+    IMAGENETTE_CLASS_DISPLAY_NAMES,
+    IMAGENETTE_CLASSES,
     _IMAGENETTE_DIRNAME,
     get_imagenette_dataset,
     get_imagenette_transforms,
@@ -36,6 +38,37 @@ def _make_fake_imagenette(
                     "RGB", (32, 32), color=(cls_idx * 40, img_idx * 60, 128)
                 ).save(img_path)
     return dataset_dir
+
+
+# ---------------------------------------------------------------------------
+# Class name tests
+# ---------------------------------------------------------------------------
+
+
+class TestClassNames:
+    def test_display_names_length(self):
+        """IMAGENETTE_CLASS_DISPLAY_NAMES must have exactly 10 entries."""
+        assert len(IMAGENETTE_CLASS_DISPLAY_NAMES) == 10
+
+    def test_display_names_match_classes_length(self):
+        """Display names and synset IDs must have the same length."""
+        assert len(IMAGENETTE_CLASS_DISPLAY_NAMES) == len(IMAGENETTE_CLASSES)
+
+    def test_display_names_are_strings(self):
+        """All display names must be non-empty strings."""
+        for name in IMAGENETTE_CLASS_DISPLAY_NAMES:
+            assert isinstance(name, str)
+            assert len(name) > 0
+
+    def test_display_names_are_human_readable(self):
+        """Display names must not be WordNet synset IDs (nXXXXXXXX)."""
+        import re
+
+        synset_pattern = re.compile(r"^n\d{8}$")
+        for name in IMAGENETTE_CLASS_DISPLAY_NAMES:
+            assert not synset_pattern.match(name), (
+                f"Display name '{name}' looks like a synset ID"
+            )
 
 
 # ---------------------------------------------------------------------------

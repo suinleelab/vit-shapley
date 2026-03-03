@@ -42,6 +42,14 @@ def _make_synthetic_dataset(
     return TensorDataset(images, labels)
 
 
+def _make_binary_dataset(
+    num_samples: int = _NUM_SAMPLES,
+) -> TensorDataset:
+    images = torch.randn(num_samples, 3, _IMAGE_SIZE, _IMAGE_SIZE)
+    labels = torch.randint(0, 2, (num_samples,))
+    return TensorDataset(images, labels)
+
+
 @pytest.fixture
 def tiny_explainer():
     """Old-style linear-head explainer (no normalization) for fast tests."""
@@ -668,3 +676,142 @@ class TestTrainExplainer:
             use_amp=False,
         )
         assert abs(h1["val_loss"][0] - h2["val_loss"][0]) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Binary explainer training tests
+# ---------------------------------------------------------------------------
+
+
+class TestBinaryTrainOneEpochExplainer:
+    def test_returns_valid_metrics(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        optimizer = torch.optim.AdamW(explainer.parameters(), lr=1e-4)
+        metrics = train_one_epoch_explainer(
+            explainer, surrogate, loader, optimizer, device,
+            num_mask_samples=2, paired=True, target_type="binary",
+        )
+        assert "loss" in metrics
+        assert isinstance(metrics["loss"], float) and metrics["loss"] >= 0.0
+
+    def test_explainer_weights_update(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        surrogate.eval()
+        for p in surrogate.parameters():
+            p.requires_grad_(False)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        loader = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        params_before = {k: v.clone() for k, v in explainer.named_parameters()}
+        optimizer = torch.optim.AdamW(explainer.parameters(), lr=1e-3)
+        train_one_epoch_explainer(
+            explainer, surrogate, loader, optimizer, device,
+            num_mask_samples=2, paired=True, target_type="binary",
+        )
+        changed = any(
+            not torch.allclose(params_before[k], v)
+            for k, v in explainer.named_parameters()
+        )
+        assert changed, "No explainer parameters changed after binary training"
+
+
+class TestBinaryEvaluateExplainer:
+    def test_returns_valid_metrics(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        metrics = evaluate_explainer(
+            explainer, surrogate, loader, device,
+            num_mask_samples=2, paired=True, target_type="binary",
+        )
+        assert "loss" in metrics and "efficiency_gap" in metrics
+        assert metrics["loss"] >= 0.0
+
+    def test_efficiency_gap_near_zero_with_additive_norm(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        loader = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        metrics = evaluate_explainer(
+            explainer, surrogate, loader, device,
+            num_mask_samples=2, paired=True, target_type="binary",
+        )
+        assert metrics["efficiency_gap"] < 1e-4
+
+
+class TestBinaryTrainExplainer:
+    def test_history_keys(self, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        train_ldr = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_ldr = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        history = train_explainer(
+            explainer, surrogate, train_ldr, val_ldr,
+            epochs=1, device=device, use_amp=False,
+            target_type="binary",
+        )
+        assert "train_loss" in history
+        assert "val_loss" in history
+        assert "val_efficiency_gap" in history
+        assert "best_val_loss" in history
+
+    def test_checkpoint_loadable(self, tmp_path, device):
+        surrogate = build_vit_surrogate(_TINY_MODEL, num_classes=1)
+        explainer = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        train_ldr = DataLoader(
+            _make_binary_dataset(), batch_size=_BATCH_SIZE, shuffle=True
+        )
+        val_ldr = DataLoader(
+            _make_binary_dataset(num_samples=4), batch_size=_BATCH_SIZE
+        )
+        train_explainer(
+            explainer, surrogate, train_ldr, val_ldr,
+            epochs=1, device=device, use_amp=False,
+            save_dir=tmp_path, target_type="binary",
+        )
+        ckpt = torch.load(
+            tmp_path / "best_explainer.pth", map_location="cpu", weights_only=True
+        )
+        assert "model_state_dict" in ckpt
+        fresh = build_vit_explainer(
+            _TINY_MODEL, num_classes=1,
+            num_attn_blocks=0, num_mlp_layers=1,
+            normalization="additive", activation=None,
+        )
+        fresh.load_state_dict(ckpt["model_state_dict"])

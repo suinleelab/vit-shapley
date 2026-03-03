@@ -1,9 +1,11 @@
 """Pydantic config for Stage 1: train_classifier."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ClassifierConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_type: str = "multiclass"
     dataset: str = "imagenette"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     model_name: str = "vit_base_patch16_224"

@@ -1,11 +1,13 @@
 """Pydantic config for Stage 2: train_surrogate."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SurrogateConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # Required — no default. Must be provided in YAML or via --set.
     classifier_ckpt: str
+    target_type: str = "multiclass"
     dataset: str = "imagenette"
     data_root: str = "/local-b/chanwkim/vit-shapley-data"
     model_name: str = "vit_base_patch16_224"

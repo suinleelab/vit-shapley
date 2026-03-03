@@ -37,6 +37,7 @@ Thumbs.db
 # Results (large/generated outputs)
 results/
 wandb/
+checkpoints/
 
 # Claude Code
 CLAUDE.md

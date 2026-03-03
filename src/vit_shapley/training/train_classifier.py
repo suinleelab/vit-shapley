@@ -49,6 +49,7 @@ def train_one_epoch(
     device: torch.device,
     scaler: torch.amp.GradScaler | None = None,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Run one training epoch.
 
@@ -80,7 +81,10 @@ def train_one_epoch(
         use_amp = scaler is not None
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             logits = model(images)
-            loss = criterion(logits, labels)
+            if target_type == "binary":
+                loss = criterion(logits, labels.float().unsqueeze(1))
+            else:
+                loss = criterion(logits, labels)
 
         if use_amp:
             scaler.scale(loss).backward()
@@ -98,7 +102,12 @@ def train_one_epoch(
 
         bs = images.size(0)
         total_loss += loss.item() * bs
-        total_correct += (logits.argmax(dim=1) == labels).sum().item()
+        if target_type == "binary":
+            total_correct += (
+                (logits.squeeze(-1) > 0).long() == labels
+            ).sum().item()
+        else:
+            total_correct += (logits.argmax(dim=1) == labels).sum().item()
         total_samples += bs
 
     return {
@@ -113,6 +122,7 @@ def evaluate(
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
+    target_type: str = "multiclass",
 ) -> dict[str, float]:
     """Evaluate the model on *loader*.
 
@@ -135,11 +145,19 @@ def evaluate(
         labels = labels.to(device, non_blocking=True)
 
         logits = model(images)
-        loss = criterion(logits, labels)
+        if target_type == "binary":
+            loss = criterion(logits, labels.float().unsqueeze(1))
+        else:
+            loss = criterion(logits, labels)
 
         bs = images.size(0)
         total_loss += loss.item() * bs
-        total_correct += (logits.argmax(dim=1) == labels).sum().item()
+        if target_type == "binary":
+            total_correct += (
+                (logits.squeeze(-1) > 0).long() == labels
+            ).sum().item()
+        else:
+            total_correct += (logits.argmax(dim=1) == labels).sum().item()
         total_samples += bs
 
     return {
@@ -160,6 +178,7 @@ def train_classifier(
     device: torch.device | str = "cpu",
     save_dir: str | os.PathLike | None = None,
     use_amp: bool = True,
+    target_type: str = "multiclass",
 ) -> dict[str, Any]:
     """Full training loop with checkpointing.
 
@@ -197,7 +216,10 @@ def train_classifier(
     device = torch.device(device) if isinstance(device, str) else device
     model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    if target_type == "binary":
+        criterion = nn.BCEWithLogitsLoss()
+    else:
+        criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     total_steps = epochs * len(train_loader)
@@ -224,9 +246,11 @@ def train_classifier(
 
     for epoch in range(1, epochs + 1):
         train_metrics = train_one_epoch(
-            model, train_loader, optimizer, criterion, device, scaler, scheduler
+            model, train_loader, optimizer, criterion, device, scaler, scheduler,
+            target_type=target_type,
         )
-        val_metrics = evaluate(model, val_loader, criterion, device)
+        val_metrics = evaluate(model, val_loader, criterion, device,
+                               target_type=target_type)
         # scheduler is stepped per batch inside train_one_epoch; no epoch step here
 
         history["train_loss"].append(train_metrics["loss"])

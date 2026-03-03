@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import ClassifierConfig, load_config
-from vit_shapley.data import get_dataset
+from vit_shapley.data import get_dataset, resolve_num_classes
 from vit_shapley.models import build_vit_classifier
 from vit_shapley.training import train_classifier
 
@@ -91,8 +91,8 @@ def main() -> None:
         drop_last=True,
     )
 
-    num_classes = len(train_dataset.classes)
-    print(f"Classes ({num_classes}): {train_dataset.classes}")
+    num_classes = resolve_num_classes(train_dataset, cfg.target_type)
+    print(f"Classes ({len(train_dataset.classes)}): {train_dataset.classes}")
 
     # Model
     print(f"Building model: {cfg.model_name} (pretrained={cfg.pretrained})")
@@ -114,6 +114,7 @@ def main() -> None:
         device=device,
         save_dir=cfg.save_dir,
         use_amp=cfg.use_amp,
+        target_type=cfg.target_type,
     )
 
     # Save config and training history as JSON

@@ -44,7 +44,7 @@ _COLOR_ZERO = np.array([227, 26, 28]) / 256  # Paired index 5
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from vit_shapley.configs import PlotConfig, load_config
-from vit_shapley.data import get_dataset
+from vit_shapley.data import get_dataset, resolve_num_classes
 from vit_shapley.evaluation import compute_kl_vs_cardinality
 from vit_shapley.models import build_vit_classifier, build_vit_surrogate
 
@@ -113,7 +113,7 @@ def main() -> None:
     print(f"  {images.shape[0]} images loaded.")
 
     # --------------------------------------------------------------- models --
-    num_classes = len(val_dataset.classes)
+    num_classes = resolve_num_classes(val_dataset, cfg.target_type)
 
     print(f"Loading classifier from {cfg.classifier_ckpt} …")
     classifier = build_vit_classifier(
@@ -201,6 +201,7 @@ def main() -> None:
             cardinality_step=cfg.step,
             device=device,
             seed=mask_seed,
+            target_type=cfg.target_type,
         )
         cardinalities = sorted(results.keys())
         num_deleted = np.array(cardinalities)

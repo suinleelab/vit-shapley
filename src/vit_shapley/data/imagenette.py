@@ -43,14 +43,29 @@ IMAGENETTE_CLASSES = [
     "n03417042",  # 1  garbage_truck
     "n01440764",  # 2  tench
     "n02102040",  # 3  English_springer
-    "n03028079",  # 4  chain_saw
+    "n03028079",  # 4  church
     "n03888257",  # 5  parachute
     "n03394916",  # 6  French_horn
-    "n03000684",  # 7  chain_saw (alt)
+    "n03000684",  # 7  chain_saw
     "n03445777",  # 8  golf_ball
     "n03425413",  # 9  gas_pump
 ]
 IMAGENETTE_CLASS_TO_IDX = {cls: i for i, cls in enumerate(IMAGENETTE_CLASSES)}
+
+# Human-readable display names corresponding to each class index.
+# Used for visualization (heatmap headers, plot labels, etc.).
+IMAGENETTE_CLASS_DISPLAY_NAMES = [
+    "cassette player",   # 0
+    "garbage truck",     # 1
+    "tench",             # 2
+    "English springer",  # 3
+    "church",            # 4
+    "parachute",         # 5
+    "French horn",       # 6
+    "chain saw",         # 7
+    "golf ball",         # 8
+    "gas pump",          # 9
+]
 
 
 def download_imagenette(root: str | os.PathLike) -> Path:
@@ -154,8 +169,8 @@ class ImageNetteCSVDataset(torch.utils.data.Dataset):
     which differs from the alphabetical ordering ``ImageFolder`` would assign.
 
     Attributes:
-        classes: List of synset IDs in reference order.
-        class_to_idx: Mapping from synset ID to integer label.
+        classes: List of human-readable class names in reference order.
+        class_to_idx: Mapping from display name to integer label.
     """
 
     def __init__(self, df: pd.DataFrame, dataset_dir: Path, transform=None):
@@ -168,8 +183,8 @@ class ImageNetteCSVDataset(torch.utils.data.Dataset):
         self._df = df.reset_index(drop=True)
         self._dataset_dir = dataset_dir
         self.transform = transform
-        self.classes = IMAGENETTE_CLASSES
-        self.class_to_idx = IMAGENETTE_CLASS_TO_IDX
+        self.classes = list(IMAGENETTE_CLASS_DISPLAY_NAMES)
+        self.class_to_idx = {name: i for i, name in enumerate(IMAGENETTE_CLASS_DISPLAY_NAMES)}
 
     def __len__(self) -> int:
         return len(self._df)

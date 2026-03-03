@@ -48,6 +48,11 @@ def _tiny_classifier(num_patches: int = 9, num_classes: int = 4) -> nn.Module:
     return _FlatClassifier()
 
 
+def _tiny_binary_classifier(num_patches: int = 9) -> nn.Module:
+    """Minimal binary classifier: outputs (B, 1) logit."""
+    return _tiny_classifier(num_patches=num_patches, num_classes=1)
+
+
 # ---------------------------------------------------------------------------
 # TestSampleFixedCardinalityMasks  (8 tests)
 # ---------------------------------------------------------------------------
@@ -330,3 +335,82 @@ class TestComputeKlVsCardinality:
         assert len(recorded_masks[0]) == len(recorded_masks[1])
         for m0, m1 in zip(recorded_masks[0], recorded_masks[1]):
             assert torch.equal(m0, m1), "Masks differ between surrogates!"
+
+
+# ---------------------------------------------------------------------------
+# Binary KL evaluation tests
+# ---------------------------------------------------------------------------
+
+
+class TestBinaryComputeKlVsCardinality:
+    """Tests for compute_kl_vs_cardinality with target_type='binary'."""
+
+    NUM_PATCHES = 9
+    N = 3
+    K = 2
+
+    @pytest.fixture()
+    def clf(self):
+        m = _tiny_binary_classifier(self.NUM_PATCHES)
+        m.eval()
+        return m
+
+    @pytest.fixture()
+    def surrogate(self, clf):
+        s = _IdentitySurrogate(clf)
+        s.eval()
+        return s
+
+    @pytest.fixture()
+    def images(self):
+        return torch.randn(self.N, 3, 12, 12)
+
+    def test_contains_zero_and_num_patches(self, surrogate, clf, images):
+        results = compute_kl_vs_cardinality(
+            surrogate=surrogate, classifier=clf, images=images,
+            num_patches=self.NUM_PATCHES, num_masks_per_cardinality=self.K,
+            cardinality_step=3, device=torch.device("cpu"),
+            target_type="binary",
+        )
+        assert 0 in results
+        assert self.NUM_PATCHES in results
+
+    def test_values_nonnegative(self, surrogate, clf, images):
+        results = compute_kl_vs_cardinality(
+            surrogate=surrogate, classifier=clf, images=images,
+            num_patches=self.NUM_PATCHES, num_masks_per_cardinality=self.K,
+            cardinality_step=3, device=torch.device("cpu"),
+            target_type="binary",
+        )
+        for vals in results.values():
+            assert all(v >= -1e-5 for v in vals)
+
+    def test_kl_near_zero_when_identical(self, clf, images):
+        """If surrogate == classifier (identity), binary KL should be ~0."""
+        surrogate = _IdentitySurrogate(clf)
+        surrogate.eval()
+        results = compute_kl_vs_cardinality(
+            surrogate=surrogate, classifier=clf, images=images,
+            num_patches=self.NUM_PATCHES, num_masks_per_cardinality=self.K,
+            cardinality_step=self.NUM_PATCHES,
+            device=torch.device("cpu"),
+            target_type="binary",
+        )
+        kl_at_zero = results[0]
+        assert all(math.isclose(v, 0.0, abs_tol=1e-5) for v in kl_at_zero), (
+            f"Expected binary KL ≈ 0 at cardinality 0, got {kl_at_zero}"
+        )
+
+    def test_seed_reproducibility(self, surrogate, clf, images):
+        kwargs = dict(
+            surrogate=surrogate, classifier=clf, images=images,
+            num_patches=self.NUM_PATCHES, num_masks_per_cardinality=self.K,
+            cardinality_step=3, device=torch.device("cpu"),
+            target_type="binary",
+        )
+        r1 = compute_kl_vs_cardinality(**kwargs, seed=42)
+        r2 = compute_kl_vs_cardinality(**kwargs, seed=42)
+        assert r1.keys() == r2.keys()
+        for m in r1:
+            for v1, v2 in zip(r1[m], r2[m]):
+                assert math.isclose(v1, v2, abs_tol=1e-7)

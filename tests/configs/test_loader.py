@@ -237,14 +237,18 @@ class TestLoadConfigOverrides:
 
 class TestLoadConfigValidation:
     def test_unknown_key_raises(self, tmp_path):
-        """Pydantic v2 by default raises on extra fields."""
+        """extra='forbid' rejects unknown fields in YAML and --set overrides."""
         cfg_file = tmp_path / "cfg.yaml"
         cfg_file.write_text("nonexistent_field: 123\n")
-        # Pydantic v2 with default model_config ignores extra fields;
-        # but we rely on model_validate — unknown keys are silently ignored
-        # by default. This test documents that behavior (no error expected).
-        cfg = load_config(ClassifierConfig, cfg_file)
-        assert not hasattr(cfg, "nonexistent_field")
+        with pytest.raises(Exception, match="nonexistent_field"):
+            load_config(ClassifierConfig, cfg_file)
+
+    def test_unknown_override_raises(self, tmp_path):
+        """extra='forbid' rejects unknown keys passed via --set."""
+        cfg_file = tmp_path / "cfg.yaml"
+        cfg_file.write_text("epochs: 10\n")
+        with pytest.raises(Exception, match="typo_key"):
+            load_config(ClassifierConfig, cfg_file, overrides=["typo_key=42"])
 
     def test_required_field_missing_raises(self, tmp_path):
         """SurrogateConfig.classifier_ckpt has no default — missing raises."""
