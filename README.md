@@ -2,7 +2,7 @@
 
 Shapley values are a theoretically grounded model explanation approach, but their exponential computational cost makes them difficult to use with large deep learning models. **ViT-Shapley** makes Shapley values practical for vision transformer (ViT) models by learning an _amortized explainer model_ that generates explanations in a single forward pass.
 
-Please see [our paper (arXiv:2206.05282)](https://arxiv.org/abs/2206.05282?context=cs.LG) for more details, as well as the work that ViT-Shapley builds on ([KernelSHAP](https://arxiv.org/abs/1705.07874), [FastSHAP](https://openreview.net/forum?id=Zq2G_VTV53T)).
+Please see our ICLR spotlight [paper](https://arxiv.org/abs/2206.05282?context=cs.LG) for more details, as well as the work that ViT-Shapley builds on ([KernelSHAP](https://arxiv.org/abs/1705.07874), [FastSHAP](https://openreview.net/forum?id=Zq2G_VTV53T)).
 
 ## Installation
 
